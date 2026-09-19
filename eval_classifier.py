@@ -68,7 +68,17 @@ def main():
         X = f['X'][:]  # (N,1,C,W)
         y = f['y_fault'][:]
         y_sev = f['y_sev'][:] if 'y_sev' in f else None
-        meta_attr = eval(f.attrs.get('meta','{}'))
+        import json, ast
+        _mr = f.attrs.get('meta', '{}')
+        if isinstance(_mr, (bytes, bytearray)):
+            _mr = _mr.decode('utf-8', errors='ignore')
+        try:
+            meta_attr = json.loads(_mr)
+        except Exception:
+            try:
+                meta_attr = ast.literal_eval(_mr)  # safe: literals only
+            except Exception:
+                meta_attr = {}
         fault_map = meta_attr.get('fault_label_map', {})
         rev = {v:k for k,v in fault_map.items()} if fault_map else {i:str(i) for i in range(int(y.max())+1)}
 

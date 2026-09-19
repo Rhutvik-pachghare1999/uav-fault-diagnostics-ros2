@@ -74,15 +74,18 @@ def main():
         X_all = f["X"][:]  # (N,1,C,W)
         # use safe dataset read API
         y_fault = f["y_fault"][:]
-        # metadata may be bytes or str; keep eval simple but guarded
+        # metadata may be bytes or str; parse safely (never eval untrusted data)
+        import json, ast
         meta_raw = f.attrs.get("meta", "{}")
+        if isinstance(meta_raw, (bytes, bytearray)):
+            meta_raw = meta_raw.decode("utf-8", errors="ignore")
         try:
-            if isinstance(meta_raw, (bytes, bytearray)):
-                meta = eval(meta_raw.decode('utf-8', errors='ignore'))
-            else:
-                meta = eval(meta_raw)
+            meta = json.loads(meta_raw)
         except Exception:
-            meta = {}
+            try:
+                meta = ast.literal_eval(meta_raw)  # safe: literals only
+            except Exception:
+                meta = {}
         n_faults = len(meta.get("fault_label_map", {})) or int(y_fault.max()+1)
     # Stratified splits by fault label when possible
     idx = np.arange(len(X_all))
