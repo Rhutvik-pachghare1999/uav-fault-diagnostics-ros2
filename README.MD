@@ -41,29 +41,21 @@ This suite provides a professional end-to-end pipeline:
 
 ---
 
-## 3. 👥 Team Contributions
+## 3. 🔧 What I Built
 
-### 3.1 Pooja Kiran - Lead AI Systems Architect
+This is a solo project spanning the full pipeline — data engineering, the ML
+models, ROS2 integration, and the tooling/CI around it.
 
-| # | Domain | Contribution Details | Specifications |
-|---|--------|---------------------|----------------|
-| 1 | **CNN Fault Classifier** | Designed 1D/2D CNN architectures for mechanical fault signature identification | 98.4% accuracy, 0.97 F1-score |
-| 2 | **RUL Prediction Engine** | Implemented Stacked LSTM for Remaining Useful Life estimation | RMSE of 4.2 cycles, temporal sequence modeling |
-| 3 | **Spectral Engineering** | Developed FFT-based feature extraction pipeline for resonance anomaly detection | Dominant frequency tracking, spectral entropy |
-| 4 | **Edge Inference Optimization** | Optimized model for real-time inference on ROS2 edge nodes | <10ms latency, low memory footprint |
-| 5 | **Data Augmentation** | Built signal augmentation pipeline: noise injection, signal shifting, and warping | 5x dataset expansion for robust training |
-| 6 | **Dataset Curation** | Managed segmentation of raw sensor data into ML-ready sliding windows | High-frequency vibration processing |
-
-### 3.2 Rhutvik Pachghare - Robotics Systems & DevOps Engineer
-
-| # | Domain | Contribution Details | Specifications |
-|---|--------|---------------------|----------------|
-| 1 | **ROS2 Middleware Integration** | Developed the `ros2_inference_node.py` for live diagnostics and topic management | ROS2 Humble, real-time message handling |
-| 2 | **Command Center Dashboard** | Built the Streamlit monitoring dashboard (`scripts/dashboard.py`) for fleet visualization | Real-time telemetry, fault logging |
-| 3 | **Synthetic Data Generation** | Utilized NVIDIA Isaac Sim for generating synthetic fault data in simulated flight | Physics-accurate fault patterns |
-| 4 | **Data Pipeline Engineering** | Engineered `scripts/build_ml_dataset.py` for automated sliding window segmentation | Multi-channel sensor synchronization |
-| 5 | **Validation & Testing** | CI-run smoke tests covering config/module import, benchmark execution, and batch-shape sanity | pytest, CI-enforced (no failure masking) |
-| 6 | **Engineering Governance** | Managed repository structure, documentation, and dependency manifests | requirements.txt, architecture mapping |
+| # | Domain | Details | Specifications |
+|---|--------|---------|----------------|
+| 1 | **CNN Fault Classifier** | 1D/2D CNN architectures for mechanical fault signature identification | reported 98.4% accuracy, 0.97 F1 (see reproducibility note) |
+| 2 | **RUL Prediction Engine** | Stacked LSTM for Remaining Useful Life estimation | RMSE ~4.2 cycles, temporal sequence modeling |
+| 3 | **Spectral Engineering** | FFT-based feature extraction pipeline for resonance anomaly detection | Dominant frequency tracking, spectral entropy |
+| 4 | **Data Pipeline** | Sliding-window segmentation (`build_ml_dataset_v2.py`) + augmentation (noise/shift/warp) | Multi-channel sensor sync, 5x expansion |
+| 5 | **ROS2 Integration** | `ros2_inference_node.py` for live diagnostics + topic management | ROS2 Humble, real-time messaging |
+| 6 | **Command Center Dashboard** | Streamlit monitoring dashboard for fleet visualization | Real-time telemetry, fault logging |
+| 7 | **Synthetic Data Generation** | NVIDIA Isaac Sim for physics-accurate fault data in simulated flight | Fault-pattern injection |
+| 8 | **Validation & CI** | Smoke tests (config/module import, benchmark exec, batch-shape) + CI | pytest, CI-enforced (no failure masking) |
 
 ---
 
