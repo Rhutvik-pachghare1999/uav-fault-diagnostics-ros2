@@ -6,7 +6,7 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
-[![Accuracy](https://img.shields.io/badge/CNN_Accuracy-98.4%25-brightgreen)](results/benchmark_metrics.csv)
+[![CNN Accuracy](https://img.shields.io/badge/CNN_Accuracy-reported_98.4%25-yellow.svg)](#-model-performance)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **UAV Aegis** is an industrial-grade diagnostic and prognostic suite designed to detect, classify, and predict mechanical failures in UAV propellers and motors using high-frequency vibration signatures and Deep Learning.
@@ -62,7 +62,7 @@ This suite provides a professional end-to-end pipeline:
 | 2 | **Command Center Dashboard** | Built the Streamlit monitoring dashboard (`scripts/dashboard.py`) for fleet visualization | Real-time telemetry, fault logging |
 | 3 | **Synthetic Data Generation** | Utilized NVIDIA Isaac Sim for generating synthetic fault data in simulated flight | Physics-accurate fault patterns |
 | 4 | **Data Pipeline Engineering** | Engineered `scripts/build_ml_dataset.py` for automated sliding window segmentation | Multi-channel sensor synchronization |
-| 5 | **Validation & Testing** | Developed comprehensive test suite covering CNN inference, dataset integrity, and augmentation | pytest, 100% logic coverage |
+| 5 | **Validation & Testing** | CI-run smoke tests covering config/module import, benchmark execution, and batch-shape sanity | pytest, CI-enforced (no failure masking) |
 | 6 | **Engineering Governance** | Managed repository structure, documentation, and dependency manifests | requirements.txt, architecture mapping |
 
 ---
@@ -110,11 +110,22 @@ graph TD
 | 2 | **F1-Score** | **0.97** | — |
 | 3 | **RMSE** | — | **4.2 Cycles** |
 
+> **Reproducibility note.** The accuracy/F1/RMSE figures above are the values
+> reported from the team's training runs. The trained model weights and the
+> corresponding evaluation artifacts (`results/`) are **not committed** to this
+> public repo, so these headline numbers are **not independently reproducible
+> from a fresh clone yet**. An episode-level, sealed held-out split and the
+> published evaluation artifacts are pending. Treat the numbers as *reported*,
+> not *independently verified here*.
+
 ---
 
 ## 6. 📈 Reproducible Benchmarks
 
-All benchmark scripts, logs, and plots are checked into [`results/`](results/) and regenerated automatically on every CI run.
+The CI smoke benchmark (`--smoke`) runs on every push to validate the pipeline
+end-to-end (I/O, metric computation, latency measurement) using a synthetic
+batch — it exercises the plumbing, not the trained model. Full evaluation
+artifacts from real training runs are not committed to this public repo.
 
 ### 6.1 Run Benchmarks Locally
 

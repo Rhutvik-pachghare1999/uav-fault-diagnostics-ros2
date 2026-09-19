@@ -38,7 +38,7 @@ jobs:
 
       # ── Unit tests ─────────────────────────────────────────────────────────
       - name: Run pytest
-        run: pytest tests/ -v --tb=short || true
+        run: pytest tests/ -v --tb=short
 
       # ── Benchmark smoke-test ────────────────────────────────────────────────
       - name: Run benchmark script
