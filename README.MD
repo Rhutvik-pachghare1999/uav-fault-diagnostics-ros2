@@ -1,4 +1,4 @@
-# 🛡️ UAV Aegis: Advanced Propeller Diagnostics & Prognostics
+# 🛡️ UAV Aegis — UAV Propeller Fault Diagnostics (ROS2 + Deep Learning)
 
 <div align="center">
 
