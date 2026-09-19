@@ -6,6 +6,7 @@ Usage:
        --pretrained scripts/models/cnn_multi_retrain.pth --out scripts/models/cnn_multi_finetune.pth \
        --epochs 40 --batch-size 64 --lr 1e-4
 """
+import ast
 import argparse, os, json
 import h5py, numpy as np
 
@@ -29,7 +30,10 @@ def main():
     with h5py.File(args.h5, 'r') as f:
         X_all = f['X'][:]  # (N,1,C,W)
         y_fault = f['y_fault'][:]
-        meta = eval(f.attrs.get('meta','{}'))
+        try:
+            meta = ast.literal_eval(f.attrs.get('meta','{}'))
+        except Exception:
+            meta = {}
         # determine dataset classes (use unique labels found)
         unique_labels = np.unique(y_fault)
         n_faults = len(unique_labels)

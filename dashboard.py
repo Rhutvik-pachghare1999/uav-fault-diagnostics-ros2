@@ -1,3 +1,4 @@
+import ast
 import streamlit as st
 import h5py
 import numpy as np
@@ -79,7 +80,10 @@ def safe_ingest_data(h5_name="ml_dataset_v2_auto.h5"):
         
         # Open in read-only to avoid locks
         with h5py.File(path, "r") as f:
-            meta = eval(f.attrs.get("meta", "{}"))
+            try:
+                meta = ast.literal_eval(f.attrs.get("meta", "{}"))
+            except Exception:
+                meta = {}
             return {
                 "n": f["X"].shape[0],
                 "shape": f["X"].shape,

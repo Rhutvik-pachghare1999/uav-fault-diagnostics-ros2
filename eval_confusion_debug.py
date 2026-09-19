@@ -4,6 +4,7 @@
 Usage:
   python3 scripts/eval_confusion_debug.py --h5 <h5> --model <pth> --out <outdir>
 """
+import ast
 import argparse, os, json
 import h5py, numpy as np, pandas as pd
 
@@ -25,7 +26,10 @@ def main():
     with h5py.File(args.h5, 'r') as f:
         X = f['X'][:]
         y = f['y_fault'][:]
-        meta = eval(f.attrs.get('meta','{}'))
+        try:
+            meta = ast.literal_eval(f.attrs.get('meta','{}'))
+        except Exception:
+            meta = {}
         dataset_label_map = meta.get('fault_label_map', {})
     unique_labels = np.unique(y)
 
