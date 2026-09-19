@@ -72,6 +72,7 @@ def main():
 
     with h5py.File(args.h5, "r") as f:
         X_all = f["X"][:]  # (N,1,C,W)
+        run_id = f["run_id"][:] if "run_id" in f else None
         # use safe dataset read API
         y_fault = f["y_fault"][:]
         # metadata may be bytes or str; parse safely (never eval untrusted data)
@@ -87,14 +88,31 @@ def main():
             except Exception:
                 meta = {}
         n_faults = len(meta.get("fault_label_map", {})) or int(y_fault.max()+1)
-    # Stratified splits by fault label when possible
+    # Split so that windows from the SAME physical run never cross the
+    # train/val/test boundary. Overlapping/adjacent windows within one run are
+    # near-duplicates; a plain random split would leak them across partitions and
+    # inflate accuracy. When run_id is available we use GroupShuffleSplit (grouped
+    # by run); otherwise we fall back to a stratified random split and warn.
     idx = np.arange(len(X_all))
-    try:
-        tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=y_fault)
-        tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=y_fault[tr_idx])
-    except Exception:
-        tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=None)
-        tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=None)
+    if run_id is not None and len(np.unique(run_id)) >= 3:
+        from sklearn.model_selection import GroupShuffleSplit
+        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+        tr_full, te_idx = next(gss.split(idx, y_fault, groups=run_id))
+        tr_idx = idx[tr_full]; te_idx = idx[te_idx]
+        gss2 = GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=42)
+        tr_rel, val_rel = next(gss2.split(tr_idx, y_fault[tr_idx], groups=run_id[tr_idx]))
+        tr_idx, val_idx = tr_idx[tr_rel], tr_idx[val_rel]
+        print(f"Run-grouped split: {len(tr_idx)} train / {len(val_idx)} val / {len(te_idx)} test "
+              f"windows over {len(np.unique(run_id))} runs (no run crosses partitions).")
+    else:
+        print("WARNING: run_id unavailable or <3 runs — falling back to stratified random "
+              "split. Windows from the same run may leak across partitions; treat metrics as optimistic.")
+        try:
+            tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=y_fault)
+            tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=y_fault[tr_idx])
+        except Exception:
+            tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=None)
+            tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=None)
 
     # compute per-channel mean/std on training set for normalization
     X_tr = X_all[tr_idx].astype('float32')

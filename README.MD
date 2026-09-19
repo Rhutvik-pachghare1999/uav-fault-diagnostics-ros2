@@ -51,7 +51,7 @@ models, ROS2 integration, and the tooling/CI around it.
 | 1 | **CNN Fault Classifier** | 1D/2D CNN architectures for mechanical fault signature identification | reported 98.4% accuracy, 0.97 F1 (see reproducibility note) |
 | 2 | **RUL Prediction Engine** | Stacked LSTM for Remaining Useful Life estimation | RMSE ~4.2 cycles, temporal sequence modeling |
 | 3 | **Spectral Engineering** | FFT-based feature extraction pipeline for resonance anomaly detection | Dominant frequency tracking, spectral entropy |
-| 4 | **Data Pipeline** | Sliding-window segmentation (`build_ml_dataset_v2.py`) + augmentation (noise/shift/warp) | Multi-channel sensor sync, 5x expansion |
+| 4 | **Data Pipeline** | Sliding-window segmentation (`build_ml_dataset_v2.py`) with per-window run_id for run-grouped splitting; augmentation applied post-split (train only) | Multi-channel sensor sync |
 | 5 | **ROS2 Integration** | `ros2_inference_node.py` for live diagnostics + topic management | ROS2 Humble, real-time messaging |
 | 6 | **Command Center Dashboard** | Streamlit monitoring dashboard for fleet visualization | Real-time telemetry, fault logging |
 | 7 | **Synthetic Data Generation** | NVIDIA Isaac Sim for physics-accurate fault data in simulated flight | Fault-pattern injection |
@@ -104,13 +104,20 @@ graph TD
 | 2 | **F1-Score** | **0.97** | — |
 | 3 | **RMSE** | — | **4.2 Cycles** |
 
-> **Reproducibility note.** The accuracy/F1/RMSE figures above are the values
-> reported from my training runs. The trained model weights and the
-> corresponding evaluation artifacts (`results/`) are **not committed** to this
-> public repo, so these headline numbers are **not independently reproducible
-> from a fresh clone yet**. An episode-level, sealed held-out split and the
-> published evaluation artifacts are pending. Treat the numbers as *reported*,
-> not *independently verified here*.
+> **Reproducibility & methodology note.** The accuracy/F1/RMSE figures above are
+> values reported from earlier training runs. Two honesty caveats:
+> - The training pipeline now uses a **run-grouped split** (`GroupShuffleSplit`
+>   by source run in `train_cnn.py`, backed by a per-window `run_id` stored in the
+>   dataset) so that overlapping sliding windows from the *same* physical run can
+>   no longer straddle train/val/test. Augmentation was also moved out of the
+>   pre-split dataset builder so it can only be applied to the training partition.
+>   This removes the window-leakage that made the earlier random-split numbers
+>   optimistic.
+> - The headline numbers above were measured **before** this split fix and the
+>   trained weights + evaluation artifacts (`results/`) are **not committed** here,
+>   so they are **not yet independently reproducible from a clean clone**. They
+>   should be **re-measured under the run-grouped split** before being treated as
+>   a validated result. Until then, treat them as *reported*, not *verified*.
 
 ---
 

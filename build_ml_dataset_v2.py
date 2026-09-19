@@ -57,9 +57,9 @@ def read_run(run_dir, window=100, step=1, vars=DEFAULT_VARS):
 def build_dataset(project_root: str, out_h5: str, window:int=100, step:int=1, vars=DEFAULT_VARS):
     runs = sorted(glob.glob(os.path.join(project_root, "isaac_dataset", "run_*")))
     print("Found runs:", len(runs))
-    all_X, all_fault_labels, all_sev, all_ur = [], [], [], []
+    all_X, all_fault_labels, all_sev, all_ur, all_run = [], [], [], [], []
     fault_label_map = {}; next_label = 0
-    for r in runs:
+    for run_id, r in enumerate(runs):
         Xs, metas = read_run(r, window=window, step=step, vars=vars)
         if not Xs: continue
         for x,m in zip(Xs, metas):
@@ -70,6 +70,7 @@ def build_dataset(project_root: str, out_h5: str, window:int=100, step:int=1, va
             all_fault_labels.append(fault_label_map[fl])
             all_sev.append(int(m.get("severity", 0)))
             all_ur.append(float(m.get("ur") or 0.0))
+            all_run.append(run_id)   # which physical run this window came from
     if not all_X:
         # No windows found: likely missing imu/state files in `isaac_dataset`.
         # Make this a graceful no-op so orchestration scripts can continue.
@@ -80,39 +81,21 @@ def build_dataset(project_root: str, out_h5: str, window:int=100, step:int=1, va
     y_fault = np.array(all_fault_labels, dtype="int64")
     y_sev = np.array(all_sev, dtype="int64")
     ur_arr = np.array(all_ur, dtype="float32")
-    # Ensure minimum dataset size by simple augmentation (noise + resampling)
-    MIN_SAMPLES = 20000
-    N = len(X)
-    if N < MIN_SAMPLES:
-        print(f"Dataset has {N} samples, which is less than requested minimum {MIN_SAMPLES}. Augmenting by resampling+noise.")
-        # compute per-channel std to scale noise
-        # X shape is (N,1,C,W) -> take std over samples (axis=0) and time (axis=3)
-        data_std = X.std(axis=(0,3), keepdims=True)
-        needed = MIN_SAMPLES - N
-        # sample indices with replacement
-        idxs = np.random.randint(0, N, size=needed)
-        aug_X = X[idxs].copy()
-        # add small gaussian noise relative to per-channel std
-        noise_scale = np.maximum(data_std, 1e-6) * 0.01
-        aug_noise = np.random.normal(loc=0.0, scale=1.0, size=aug_X.shape).astype('float32') * noise_scale
-        aug_X = aug_X + aug_noise
-        aug_y_fault = y_fault[idxs].copy()
-        aug_y_sev = y_sev[idxs].copy()
-        aug_ur = ur_arr[idxs].copy()
-        # concatenate
-        X = np.concatenate([X, aug_X], axis=0)
-        y_fault = np.concatenate([y_fault, aug_y_fault], axis=0)
-        y_sev = np.concatenate([y_sev, aug_y_sev], axis=0)
-        ur_arr = np.concatenate([ur_arr, aug_ur], axis=0)
-        print(f"Augmented dataset to {len(X)} samples.")
+    run_ids = np.array(all_run, dtype="int64")
+
+    # NOTE: augmentation is intentionally NOT done here. Duplicating/perturbing
+    # windows before the train/test split would place near-duplicates of the same
+    # window on both sides of the split (leakage). Augmentation must happen AFTER
+    # a run-grouped split, on the training partition only — see train_cnn.py.
     os.makedirs(os.path.dirname(out_h5) or ".", exist_ok=True)
     with h5py.File(out_h5, "w") as f:
         f.create_dataset("X", data=X, compression="gzip")
         f.create_dataset("y_fault", data=y_fault)
         f.create_dataset("y_sev", data=y_sev)
         f.create_dataset("ur", data=ur_arr)
+        f.create_dataset("run_id", data=run_ids)  # for run-grouped splitting
         f.attrs["meta"] = json.dumps({"fault_label_map": fault_label_map, "window": window, "vars": vars})
-    print("Wrote", out_h5, "samples=", len(X))
+    print("Wrote", out_h5, "samples=", len(X), "runs=", int(run_ids.max())+1 if len(run_ids) else 0)
     return out_h5
 
 if __name__ == "__main__":
