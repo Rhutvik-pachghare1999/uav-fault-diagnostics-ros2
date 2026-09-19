@@ -25,7 +25,17 @@ def main():
         X_all = f['X'][:]
         y_sev = f['y_sev'][:] if 'y_sev' in f else None
         ur_arr = f['ur'][:] if 'ur' in f else None
-        meta = eval(f.attrs.get('meta', '{}'))
+        import json, ast
+        _mr = f.attrs.get('meta', '{}')
+        if isinstance(_mr, (bytes, bytearray)):
+            _mr = _mr.decode('utf-8', errors='ignore')
+        try:
+            meta = json.loads(_mr)
+        except Exception:
+            try:
+                meta = ast.literal_eval(_mr)  # safe: literals only
+            except Exception:
+                meta = {}
         fault_map = meta.get('fault_label_map', {})
     print('Loaded h5:', args.h5, 'X shape=', X_all.shape)
 

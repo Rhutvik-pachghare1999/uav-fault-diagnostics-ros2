@@ -9,7 +9,7 @@
 [![CNN Accuracy](https://img.shields.io/badge/CNN_Accuracy-reported_98.4%25-yellow.svg)](#-model-performance)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**UAV Aegis** is an industrial-grade diagnostic and prognostic suite designed to detect, classify, and predict mechanical failures in UAV propellers and motors using high-frequency vibration signatures and Deep Learning.
+**UAV Aegis** is an end-to-end diagnostic and prognostic pipeline that detects, classifies, and predicts mechanical failures in UAV propellers and motors using high-frequency vibration signatures and Deep Learning.
 
 </div>
 
