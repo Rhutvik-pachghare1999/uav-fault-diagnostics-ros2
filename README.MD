@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![CI](https://github.com/Rhutvik-pachghare1999/UAV-Aegis/actions/workflows/ci.yml/badge.svg)](https://github.com/Rhutvik-pachghare1999/UAV-Aegis/actions/workflows/ci.yml)
+[![CI](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/actions/workflows/ci.yml/badge.svg)](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/actions/workflows/ci.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![ROS2](https://img.shields.io/badge/ROS2-Humble-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
@@ -33,7 +33,7 @@ This suite provides a professional end-to-end pipeline:
 
 | # | Solution Layer | Technical Implementation | Benefit |
 |---|----------------|--------------------------|---------|
-| 1 | **Deep Intelligence** | 1D/2D CNN architectures | 98.4% fault classification accuracy |
+| 1 | **Deep Intelligence** | 1D/2D CNN architectures | reported 98.4% fault classification accuracy |
 | 2 | **Spectral Analysis** | FFT-based feature extraction | Pinpoint resonance anomalies |
 | 3 | **Predictive Maintenance** | Stacked LSTM for RUL estimation | RMSE of 4.2 cycles for mission planning |
 | 4 | **Real-time Dashboard** | Hardened Streamlit Command Center | Fleet health monitoring at a glance |
@@ -87,6 +87,8 @@ graph TD
 
 ## 5. 📊 Model Performance
 
+*Reported per-class results (see the reproducibility note below — not yet independently reproducible from a clean clone).*
+
 | # | Class | Description | CNN Accuracy |
 |---|-------|-------------|--------------|
 | 1 | ✅ **Healthy** | Nominal operation | 99.2% |
@@ -103,7 +105,7 @@ graph TD
 | 3 | **RMSE** | — | **4.2 Cycles** |
 
 > **Reproducibility note.** The accuracy/F1/RMSE figures above are the values
-> reported from the team's training runs. The trained model weights and the
+> reported from my training runs. The trained model weights and the
 > corresponding evaluation artifacts (`results/`) are **not committed** to this
 > public repo, so these headline numbers are **not independently reproducible
 > from a fresh clone yet**. An episode-level, sealed held-out split and the
@@ -131,12 +133,15 @@ python benchmarks/run_benchmark.py --smoke
 
 ### 6.2 Benchmark Outputs
 
+Running the benchmark locally generates the following in `results/` (not
+committed — regenerate with the commands above):
+
 | File | Description |
 |------|-------------|
-| [`results/benchmark_metrics.csv`](results/benchmark_metrics.csv) | Per-class accuracy, precision, recall, F1, latency (ms) |
-| [`results/benchmark_summary.json`](results/benchmark_summary.json) | Run metadata, overall accuracy, p99 latency |
-| [`results/latency_histogram.png`](results/latency_histogram.png) | Inference latency distribution plot |
-| [`results/benchmark.log`](results/benchmark.log) | Full console log from last run |
+| `results/benchmark_metrics.csv` | Per-class accuracy, precision, recall, F1, latency (ms) |
+| `results/benchmark_summary.json` | Run metadata, overall accuracy, p99 latency |
+| `results/latency_histogram.png` | Inference latency distribution plot |
+| `results/benchmark.log` | Full console log from last run |
 
 ---
 
@@ -162,8 +167,8 @@ See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the full workflow
 ### 8.1 Setup Environment
 
 ```bash
-git clone https://github.com/Rhutvik-pachghare1999/UAV-Aegis.git
-cd UAV-Aegis
+git clone https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2.git
+cd uav-fault-diagnostics-ros2
 pip install -r requirements.txt
 ```
 
@@ -208,13 +213,18 @@ Input: Raw vibration window [N x 1]
 pytest tests/ -v
 ```
 
+CI-enforced (no failure masking). Current suite is fast smoke tests that keep
+the pipeline importable and the benchmark runnable on every push:
+
 | # | Test | Description | Status |
 |---|------|-------------|--------|
-| 1 | `test_cnn_inference.py` | Verify output shape and class probabilities | ✅ |
-| 2 | `test_dataset_pipeline.py` | Check sliding window segmentation | ✅ |
-| 3 | `test_augmentation.py` | Validate noise bounds and warping | ✅ |
-| 4 | `test_lstm_rul.py` | Check RUL output is positive float | ✅ |
-| 5 | `test_smoke.py` | Config imports, benchmark smoke, batch shapes | ✅ |
+| 1 | `test_config_importable` | `config.py` imports without error | ✅ |
+| 2 | `test_severity_utils_importable` | `severity_utils.py` imports without error | ✅ |
+| 3 | `test_benchmark_smoke` | `run_benchmark.py --smoke` completes + writes metrics CSV | ✅ |
+| 4 | `test_synthetic_batch_shape` | Synthetic batch generator returns expected shapes | ✅ |
+
+> Deeper model-level tests (trained-weight inference, held-out evaluation) are
+> pending alongside the committed evaluation artifacts.
 
 ---
 
@@ -247,5 +257,5 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 ## 14. 📧 Contact & Support
 
 For questions, issues, or collaboration:
-- **GitHub Issues**: [UAV-Aegis/issues](https://github.com/Rhutvik-pachghare1999/UAV-Aegis/issues)
-- **Project Repository**: [github.com/Rhutvik-pachghare1999/UAV-Aegis](https://github.com/Rhutvik-pachghare1999/UAV-Aegis)
+- **GitHub Issues**: [UAV-Aegis/issues](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/issues)
+- **Project Repository**: [github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2)
