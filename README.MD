@@ -152,10 +152,10 @@ committed — regenerate with the commands above):
 
 ---
 
-## 7. 🔬 Cross-dataset Evaluation (External, Rigorously Validated)
+## 7. 🔬 Cross-dataset Evaluation (External, Provenance-Tracked)
 
-A **separate, rigorously-validated** cross-dataset sim-to-real evaluation lives in
-a different repository:
+A **separate, provenance-tracked** cross-dataset evaluation lives in a different
+repository:
 
 → **[`robotics-eval-framework/experiments/uav/`](https://github.com/Rhutvik-pachghare1999/robotics-eval-framework/tree/master/experiments/uav)**
 
@@ -169,29 +169,40 @@ and different reproducibility guarantees. Keep them distinct.
 
 | Item | Value | Source |
 |------|-------|--------|
-| Task | Binary fault detection (healthy vs faulty), sim→real transfer | `experiments/uav/run_cross_dataset.py` |
-| Source (train) | DronePropA — **Simulink-generated** (127 flights) | `SIMULATED` evidence class |
-| Target (test) | TII UAV Realistic Fault Dataset — **real PX4 flight logs** (99 missions) | `REAL-PUBLIC` evidence class |
+| Task | Binary fault detection (healthy vs faulty), cross-dataset transfer | `experiments/uav/run_cross_dataset.py` |
+| Source (train) | DronePropA — **REAL experimental data** (QDrone + OptiTrack, 127 .mat flights) | `REAL-PUBLIC` evidence class |
+| Target (test) | TII UAV Realistic Fault Dataset — **REAL PX4 flight logs** (99 missions) | `REAL-PUBLIC` evidence class |
+| Transfer type | `real_to_real` (both datasets are real experimental data) | — |
 | Best result | **macro_f1 = 0.9290** (RandomForest, time_broad features, DP→TII) | `results/uav_cross_dataset_time_broad.json` |
-| Permutation test | True F1 = 0.9290 vs shuffled F1 = 0.5014 ± 0.0524, **p = 0.0** (0/100 reached 0.93) | `diagnostics/uav_cross_dataset_scrutiny.json` |
-| `evidence_class` | `SIMULATED` (weakest-link: model trained on simulated data) | schema-validated |
+| Status | **Provenance-tracked, under re-audit** | `evidence_class: REAL-PUBLIC` |
 
-### Why this is trustworthy
+> **Re-audit notice (2026-09-20):** The 0.9290 DP→TII RandomForest macro-F1
+> (time_broad) is reported as a **provenance-tracked result under re-audit**. The
+> permutation test in `diagnostics/uav_cross_dataset_scrutiny.json` only shuffles
+> labels against fixed predictions — it does **not** retrain under the null, so it
+> is **not** a valid significance test. A proper permutation test (retrain per
+> shuffle) and domain-confound checks are pending. Treat 0.9290 as provisional until
+> that re-run completes.
+
+### Provenance and honesty
 
 - **Schema-validated manifests**: every result is backed by a JSON manifest that
   passes `scripts/validate_results.py` against
   `schema/result_manifest.schema.json` (required fields: `evidence_class`,
   `dataset`, `split`, `seed`, `git_sha`, `dataset_sha256`, `metrics`).
-- **Permutation-validated**: the 0.93 is **not** domain leakage — 100 shuffled-label
-  runs collapse to 0.50 ± 0.05 (chance), p = 0.0. The model learns fault physics
-  that transfer from Simulink to real PX4 logs.
-- **Honest reverse-direction failure**: TII→DP (train on real, test on sim) is
-  near-chance (macro_f1 = 0.49) — expected for sim→real transfer, and reported as-is.
-- **DronePropA-is-Simulink discovery**: the 24.41 Hz peak initially looked like
-  propeller RPM but was proven to be a control loop rate (1000/41 Hz, appears in
-  motor_CMD and ESC telemetry, r = −0.753 vs throttle, pegged across all flights).
-  No order-normalized (1P/2P) features were used — the feature pipeline is
-  sampling-rate-invariant (time-domain + broadband spectral on normalized freq 0–0.5).
+- **`evidence_class: REAL-PUBLIC`**: both DronePropA and TII are real experimental
+  datasets. DronePropA is QDrone indoor flights with OptiTrack motion capture
+  (Mendeley, CC BY 4.0). TII is real PX4 flight logs (GitHub, MIT license).
+- **127 vs 130 file reconciliation**: the DronePropA Mendeley record describes 130
+  flights but the download contains 127 `.mat` files. The 3 missing files are all
+  F3 (surface_cut) at higher severities (SV2/SV3); see
+  `data/source/dronepropa_exclusion_manifest.json`.
+- **24.41 Hz control-loop artifact**: a 24.41 Hz peak in DronePropA motor_CMD and
+  gyro_yaw was initially mistaken for propeller RPM. Forensic analysis proved it is
+  a control-loop rate (1000/41 Hz), not a physical RPM (r = −0.753 vs throttle,
+  pegged across all flights). No order-normalized (1P/2P) features were used.
+- **Honest reverse-direction failure**: TII→DP (train on TII, test on DronePropA)
+  is near-chance (macro_f1 = 0.49) — reported as-is, not hidden.
 - **CORAL nuance reported**: CORAL alignment helps the linear model (+0.20 macro_f1)
   but *hurts* RandomForest (−0.26) — the full table (naive/time_broad/coral, both
   directions) is in the external repo.
@@ -200,11 +211,12 @@ and different reproducibility guarantees. Keep them distinct.
 
 | File | Contents |
 |------|----------|
-| `robotics-eval-framework/experiments/uav/README.md` | Full write-up: escalation table, permutation test, CORAL nuance, reproduce commands |
+| `robotics-eval-framework/experiments/uav/README.md` | Full write-up: escalation table, 127-vs-130 reconciliation, CORAL nuance, reproduce commands |
 | `robotics-eval-framework/results/uav_cross_dataset_naive.json` | Naive features (18), both directions, schema-validated |
-| `robotics-eval-framework/results/uav_cross_dataset_time_broad.json` | Time+broadband features (54), both directions, **0.93 result**, schema-validated |
+| `robotics-eval-framework/results/uav_cross_dataset_time_broad.json` | Time+broadband features (54), both directions, **0.9290 result**, schema-validated |
 | `robotics-eval-framework/results/uav_cross_dataset_coral.json` | CORAL-aligned (54+align), both directions, schema-validated |
-| `robotics-eval-framework/diagnostics/uav_cross_dataset_scrutiny.json` | Permutation test (p=0.0), feature distributions, RF importances |
+| `robotics-eval-framework/data/source/dronepropa_exclusion_manifest.json` | 3 missing F3 files (127 vs 130 reconciliation) |
+| `robotics-eval-framework/diagnostics/uav_cross_dataset_scrutiny.json` | Provisional permutation test (label-shuffle only, NOT a valid null) |
 
 ---
 
