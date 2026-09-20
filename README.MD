@@ -173,16 +173,41 @@ and different reproducibility guarantees. Keep them distinct.
 | Source (train) | DronePropA — **REAL experimental data** (QDrone + OptiTrack, 127 .mat flights) | `REAL-PUBLIC` evidence class |
 | Target (test) | TII UAV Realistic Fault Dataset — **REAL PX4 flight logs** (99 missions) | `REAL-PUBLIC` evidence class |
 | Transfer type | `real_to_real` (both datasets are real experimental data) | — |
-| Best result | **macro_f1 = 0.9290** (RandomForest, time_broad features, DP→TII) | `results/uav_cross_dataset_time_broad.json` |
-| Status | **Provenance-tracked, under re-audit** | `evidence_class: REAL-PUBLIC` |
+| All-feature result | macro_f1 = **0.9290** (RandomForest, time_broad, 54 features) | `results/uav_cross_dataset_time_broad.json` |
+| **Shape-only result** | macro_f1 = **0.7391** (RandomForest, amplitude-ablated, 42 features) | `results/uav_amplitude_ablation.json` |
+| **Bootstrap 95% CI** | macro_f1 = **0.7391**, CI = [0.6005, 0.8439] (2000 resamples) | `results/uav_bootstrap_ci.json` |
+| **Domain classifier** | macro_f1 = **1.0000** (DP vs TII, shape-only) | `results/uav_domain_classifier.json` |
+| **Permutation test** | p = **0.003** (1000 perms, retrain under null, null mean 0.454 ± 0.048) | `diagnostics/uav_permutation_test.json` |
+| Status | **Re-audited: 0.929 is ~40% amplitude-inflated; 0.74 is the honest estimate** | `evidence_class: REAL-PUBLIC` |
 
-> **Re-audit notice (2026-09-20):** The 0.9290 DP→TII RandomForest macro-F1
-> (time_broad) is reported as a **provenance-tracked result under re-audit**. The
-> permutation test in `diagnostics/uav_cross_dataset_scrutiny.json` only shuffles
-> labels against fixed predictions — it does **not** retrain under the null, so it
-> is **not** a valid significance test. A proper permutation test (retrain per
-> shuffle) and domain-confound checks are pending. Treat 0.9290 as provisional until
-> that re-run completes.
+> **Re-audit complete (2026-09-20):** The 0.9290 all-feature DP→TII RandomForest
+> macro-F1 (time_broad, 54 features) was found to be **~40% amplitude-inflated**.
+> An amplitude ablation (shape-only features: kurtosis, crest factor, shape factor,
+> skew, spectral centroid, spectral kurtosis, band-energy *ratio* — dropping rms
+> and absolute band energy) drops DP→TII RF to **0.7391** (−0.19). The amplitude
+> features (rms, absolute band energy) carry real fault signal but also carry
+> cross-domain signal-scale differences (DronePropA QDrone vs TII PX4 have
+> different signal magnitudes), which inflate the cross-dataset transfer. The
+> honest transfer estimate is **0.74** (shape-only, amplitude-ablated).
+>
+> The 0.929 survives a correct permutation test (1000 permutations, shuffle source
+> labels, retrain under null: p=0.003, null mean 0.454 ± 0.048, z=9.91σ), so the
+> transfer is real — but ~40% of the 0.929 is amplitude confound, not fault physics.
+> See `diagnostics/uav_permutation_test.json` for the correct permutation test
+> (machine-readable: `p_value_ge`, `null_mean_f1`, `null_std_f1`, `k_null_ge_true`)
+> and `results/uav_amplitude_ablation.json` for the shape-only manifest.
+>
+> **Bootstrap 95% CI** (2000 resamples over 99 TII missions, shape-only): macro-F1
+> = 0.7391, CI = [0.6005, 0.8439]. The 0.929 is outside this CI, confirming it was
+> amplitude-inflated. See `results/uav_bootstrap_ci.json`.
+>
+> **Domain classifier** (DP vs TII, shape-only): macro-F1 = 1.0000 — domains are
+> perfectly separable even on shape-only features. Confound risk is high; cross-dataset
+> transfer may exploit domain identity. See `results/uav_domain_classifier.json`.
+>
+> **Holdouts within DronePropA** (shape-only): cross-trajectory (train t1-4, test t5,
+> rotate) 0.7279 ± 0.0584 (n=5); cross-speed 0.4642 ± 0.0748 (n=2); cross-drone
+> skipped (single-class test sets). See `results/uav_holdouts.json`.
 
 ### Provenance and honesty
 
@@ -215,8 +240,14 @@ and different reproducibility guarantees. Keep them distinct.
 | `robotics-eval-framework/results/uav_cross_dataset_naive.json` | Naive features (18), both directions, schema-validated |
 | `robotics-eval-framework/results/uav_cross_dataset_time_broad.json` | Time+broadband features (54), both directions, **0.9290 result**, schema-validated |
 | `robotics-eval-framework/results/uav_cross_dataset_coral.json` | CORAL-aligned (54+align), both directions, schema-validated |
+| `robotics-eval-framework/results/uav_amplitude_ablation.json` | Shape-only (amplitude-ablated) result: **0.7391 macro-F1**, schema-validated |
+| `robotics-eval-framework/results/uav_bootstrap_ci.json` | Bootstrap 95% CI on shape-only: [0.6005, 0.8439], 2000 resamples |
+| `robotics-eval-framework/results/uav_domain_classifier.json` | Domain classifier (DP vs TII, shape-only): macro-F1 1.0000 (highly separable) |
+| `robotics-eval-framework/results/uav_holdouts.json` | Within-DronePropA holdouts (shape-only): cross-trajectory 0.7279, cross-speed 0.4642 |
+| `robotics-eval-framework/diagnostics/uav_permutation_test.json` | Correct permutation test (1000 perms, retrain under null): p=0.003, null mean 0.454 ± 0.048 |
+| `robotics-eval-framework/diagnostics/uav_holdouts_detail.json` | Per-fold holdout details (cross-trajectory, cross-speed, cross-drone) |
 | `robotics-eval-framework/data/source/dronepropa_exclusion_manifest.json` | 3 missing F3 files (127 vs 130 reconciliation) |
-| `robotics-eval-framework/diagnostics/uav_cross_dataset_scrutiny.json` | Provisional permutation test (label-shuffle only, NOT a valid null) |
+| `robotics-eval-framework/diagnostics/uav_cross_dataset_scrutiny.json` | Old permutation test (label-shuffle only, NOT a valid null — superseded by `uav_permutation_test.json`) |
 
 ---
 
