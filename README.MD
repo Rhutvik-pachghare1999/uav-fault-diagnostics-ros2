@@ -152,7 +152,63 @@ committed — regenerate with the commands above):
 
 ---
 
-## 7. ⚙️ CI / Continuous Integration
+## 7. 🔬 Cross-dataset Evaluation (External, Rigorously Validated)
+
+A **separate, rigorously-validated** cross-dataset sim-to-real evaluation lives in
+a different repository:
+
+→ **[`robotics-eval-framework/experiments/uav/`](https://github.com/Rhutvik-pachghare1999/robotics-eval-framework/tree/master/experiments/uav)**
+
+This is a **distinct experiment** from the CNN/LSTM results in §5 above. The
+"reported 98.4%" CNN accuracy and "0.97" F1 in §5 are *this repo's* within-dataset
+numbers on synthetic Isaac Sim data, and are **not** the 0.93 cross-dataset figure.
+They come from different models, different datasets, different evaluation protocols,
+and different reproducibility guarantees. Keep them distinct.
+
+### What the external evaluation found
+
+| Item | Value | Source |
+|------|-------|--------|
+| Task | Binary fault detection (healthy vs faulty), sim→real transfer | `experiments/uav/run_cross_dataset.py` |
+| Source (train) | DronePropA — **Simulink-generated** (127 flights) | `SIMULATED` evidence class |
+| Target (test) | TII UAV Realistic Fault Dataset — **real PX4 flight logs** (99 missions) | `REAL-PUBLIC` evidence class |
+| Best result | **macro_f1 = 0.9290** (RandomForest, time_broad features, DP→TII) | `results/uav_cross_dataset_time_broad.json` |
+| Permutation test | True F1 = 0.9290 vs shuffled F1 = 0.5014 ± 0.0524, **p = 0.0** (0/100 reached 0.93) | `diagnostics/uav_cross_dataset_scrutiny.json` |
+| `evidence_class` | `SIMULATED` (weakest-link: model trained on simulated data) | schema-validated |
+
+### Why this is trustworthy
+
+- **Schema-validated manifests**: every result is backed by a JSON manifest that
+  passes `scripts/validate_results.py` against
+  `schema/result_manifest.schema.json` (required fields: `evidence_class`,
+  `dataset`, `split`, `seed`, `git_sha`, `dataset_sha256`, `metrics`).
+- **Permutation-validated**: the 0.93 is **not** domain leakage — 100 shuffled-label
+  runs collapse to 0.50 ± 0.05 (chance), p = 0.0. The model learns fault physics
+  that transfer from Simulink to real PX4 logs.
+- **Honest reverse-direction failure**: TII→DP (train on real, test on sim) is
+  near-chance (macro_f1 = 0.49) — expected for sim→real transfer, and reported as-is.
+- **DronePropA-is-Simulink discovery**: the 24.41 Hz peak initially looked like
+  propeller RPM but was proven to be a control loop rate (1000/41 Hz, appears in
+  motor_CMD and ESC telemetry, r = −0.753 vs throttle, pegged across all flights).
+  No order-normalized (1P/2P) features were used — the feature pipeline is
+  sampling-rate-invariant (time-domain + broadband spectral on normalized freq 0–0.5).
+- **CORAL nuance reported**: CORAL alignment helps the linear model (+0.20 macro_f1)
+  but *hurts* RandomForest (−0.26) — the full table (naive/time_broad/coral, both
+  directions) is in the external repo.
+
+### Where to look
+
+| File | Contents |
+|------|----------|
+| `robotics-eval-framework/experiments/uav/README.md` | Full write-up: escalation table, permutation test, CORAL nuance, reproduce commands |
+| `robotics-eval-framework/results/uav_cross_dataset_naive.json` | Naive features (18), both directions, schema-validated |
+| `robotics-eval-framework/results/uav_cross_dataset_time_broad.json` | Time+broadband features (54), both directions, **0.93 result**, schema-validated |
+| `robotics-eval-framework/results/uav_cross_dataset_coral.json` | CORAL-aligned (54+align), both directions, schema-validated |
+| `robotics-eval-framework/diagnostics/uav_cross_dataset_scrutiny.json` | Permutation test (p=0.0), feature distributions, RF importances |
+
+---
+
+## 8. ⚙️ CI / Continuous Integration
 
 This repo uses **GitHub Actions** for automated quality gates on every push and pull request.
 
@@ -169,9 +225,9 @@ See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the full workflow
 
 ---
 
-## 8. 🚀 Quick Start
+## 9. 🚀 Quick Start
 
-### 8.1 Setup Environment
+### 9.1 Setup Environment
 
 ```bash
 git clone https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2.git
@@ -179,7 +235,7 @@ cd uav-fault-diagnostics-ros2
 pip install -r requirements.txt
 ```
 
-### 8.2 Full Pipeline Execution
+### 9.2 Full Pipeline Execution
 
 | # | Step | Command | Output |
 |---|------|---------|--------|
@@ -192,9 +248,9 @@ pip install -r requirements.txt
 
 ---
 
-## 9. 🔧 Key Algorithms
+## 10. 🔧 Key Algorithms
 
-### 9.1 1D-CNN Fault Classifier
+### 10.1 1D-CNN Fault Classifier
 
 ```
 Input: Raw vibration window [N x 1]
@@ -214,7 +270,7 @@ Input: Raw vibration window [N x 1]
 
 ---
 
-## 10. 🧹 Testing
+## 11. 🧹 Testing
 
 ```bash
 pytest tests/ -v
@@ -235,7 +291,7 @@ the pipeline importable and the benchmark runnable on every push:
 
 ---
 
-## 11. 📐 Design Decisions
+## 12. 📐 Design Decisions
 
 | # | Decision | Rationale | Benefit |
 |---|----------|-----------|---------|
@@ -246,13 +302,13 @@ the pipeline importable and the benchmark runnable on every push:
 
 ---
 
-## 12. 📜 License
+## 13. 📜 License
 
 Distributed under the **MIT License**. See `LICENSE` for details.
 
 ---
 
-## 13. 👤 Author
+## 14. 👤 Author
 
 **Rhutvik Pachghare** | Master's in Robotics & Automation | Arizona State University
 
@@ -261,7 +317,7 @@ Distributed under the **MIT License**. See `LICENSE` for details.
 
 ---
 
-## 14. 📧 Contact & Support
+## 15. 📧 Contact & Support
 
 For questions, issues, or collaboration:
 - **GitHub Issues**: [UAV-Aegis/issues](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/issues)
