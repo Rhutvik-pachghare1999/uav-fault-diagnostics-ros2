@@ -178,36 +178,66 @@ and different reproducibility guarantees. Keep them distinct.
 | **Bootstrap 95% CI** | macro_f1 = **0.7391**, CI = [0.6005, 0.8439] (2000 resamples) | `results/uav_bootstrap_ci.json` |
 | **Domain classifier** | macro_f1 = **1.0000** (DP vs TII, shape-only) | `results/uav_domain_classifier.json` |
 | **Permutation test** | p = **0.003** (1000 perms, retrain under null, null mean 0.454 ± 0.048) | `diagnostics/uav_permutation_test.json` |
-| Status | **Re-audited: 0.929 is ~40% amplitude-inflated; 0.74 is the honest estimate** | `evidence_class: REAL-PUBLIC` |
+| Status | **Cross-dataset transfer NOT ESTABLISHED — 0.74 is domain-confounded (domain classifier macro-F1 = 1.0)** | `evidence_class: REAL-PUBLIC` |
 
-> **Re-audit complete (2026-09-20):** The 0.9290 all-feature DP→TII RandomForest
-> macro-F1 (time_broad, 54 features) was found to be **~40% amplitude-inflated**.
-> An amplitude ablation (shape-only features: kurtosis, crest factor, shape factor,
-> skew, spectral centroid, spectral kurtosis, band-energy *ratio* — dropping rms
-> and absolute band energy) drops DP→TII RF to **0.7391** (−0.19). The amplitude
-> features (rms, absolute band energy) carry real fault signal but also carry
-> cross-domain signal-scale differences (DronePropA QDrone vs TII PX4 have
-> different signal magnitudes), which inflate the cross-dataset transfer. The
-> honest transfer estimate is **0.74** (shape-only, amplitude-ablated).
+> **Re-audit complete (2026-09-20) — final verdict: cross-dataset transfer NOT
+> ESTABLISHED.** The model learns **real fault structure on DronePropA**
+> (permutation test p=0.003, 1000 perms, retrain under null; cross-trajectory
+> holdout 0.73) but **cross-DATASET transfer to TII is not cleanly established**:
+> a domain classifier separates DP from TII with **macro-F1 = 1.0** even on
+> shape-only features (the datasets are 100% separable), cross-dataset
+> healthy-recall on TII is **9/19 (near chance)**, and cross-speed holdout within
+> DronePropA collapses to **0.46 (chance)**. The naive 0.929 was
+> **amplitude-inflated** (~40% from rms + absolute band energy, partly
+> cross-domain signal-scale differences); the 0.74 shape-only score **remains
+> domain-confounded**. We report cross-dataset fault transfer as **NOT
+> ESTABLISHED** on this data.
 >
-> The 0.929 survives a correct permutation test (1000 permutations, shuffle source
-> labels, retrain under null: p=0.003, null mean 0.454 ± 0.048, z=9.91σ), so the
-> transfer is real — but ~40% of the 0.929 is amplitude confound, not fault physics.
-> See `diagnostics/uav_permutation_test.json` for the correct permutation test
-> (machine-readable: `p_value_ge`, `null_mean_f1`, `null_std_f1`, `k_null_ge_true`)
-> and `results/uav_amplitude_ablation.json` for the shape-only manifest.
+> **Contribution (reframed):** the valuable result is the **methodology** — a
+> rigorous adversarial-validation pipeline (amplitude ablation, correct
+> permutation test with retrain-under-null, bootstrap CI, domain classifier,
+> within-dataset holdouts) that **detects domain confound in cross-dataset
+> fault diagnosis**. The pipeline caught that the 0.929 was amplitude-inflated
+> and that the 0.74 is domain-confounded (domain classifier macro-F1 = 1.0).
 >
-> **Bootstrap 95% CI** (2000 resamples over 99 TII missions, shape-only): macro-F1
-> = 0.7391, CI = [0.6005, 0.8439]. The 0.929 is outside this CI, confirming it was
-> amplitude-inflated. See `results/uav_bootstrap_ci.json`.
+> **Amplitude ablation:** shape-only features (kurtosis, crest factor, shape
+> factor, skew, spectral centroid, spectral kurtosis, band-energy *ratio* —
+> dropping rms and absolute band energy) drops DP→TII RF to **0.7391** (−0.19
+> from 0.9290). ~40% of the 0.929 was amplitude/magnitude signal partly
+> confounded with cross-domain scale differences (DronePropA QDrone vs TII PX4
+> have different signal magnitudes). See
+> `results/uav_amplitude_ablation.json`.
 >
-> **Domain classifier** (DP vs TII, shape-only): macro-F1 = 1.0000 — domains are
-> perfectly separable even on shape-only features. Confound risk is high; cross-dataset
-> transfer may exploit domain identity. See `results/uav_domain_classifier.json`.
+> **Correct permutation test:** 1000 permutations, shuffle **source**
+> (DronePropA) labels, **retrain RF per shuffle**, evaluate on fixed TII.
+> True F1=0.9290, null mean=0.4540 ± 0.0479, **p=0.003** (k=2/1000 ≥ true),
+> z=9.91σ. The 0.929 is statistically significant (transfer is real), but ~40%
+> is amplitude confound. See `diagnostics/uav_permutation_test.json`.
 >
-> **Holdouts within DronePropA** (shape-only): cross-trajectory (train t1-4, test t5,
-> rotate) 0.7279 ± 0.0584 (n=5); cross-speed 0.4642 ± 0.0748 (n=2); cross-drone
-> skipped (single-class test sets). See `results/uav_holdouts.json`.
+> **Bootstrap 95% CI** (2000 resamples over 99 TII missions, shape-only):
+> macro-F1 = 0.7391, CI = [0.6005, 0.8439]. The 0.929 is outside this CI,
+> confirming it was amplitude-inflated. See `results/uav_bootstrap_ci.json`.
+>
+> **Domain classifier (decisive):** DP-vs-TII classifier on shape-only
+> features: **macro-F1 = 1.0000**, accuracy = 1.0, AUC = 1.0, confusion
+> [[127, 0], [0, 99]]. The datasets are 100% separable even on shape-only
+> features — any cross-dataset score is domain-confounded. Top features:
+> `accel_y_spectral_kurtosis` (0.16), `gyro_z_spectral_centroid` (0.13),
+> `gyro_y_spectral_kurtosis` (0.13). See `results/uav_domain_classifier.json`.
+>
+> **Holdouts within DronePropA** (shape-only): cross-trajectory (train t1-4,
+> test t5, rotate) **0.7279 ± 0.0584** (n=5, positive — generalizes across
+> trajectories); cross-speed (leave-one-speed-out) **0.4642 ± 0.0748** (n=2,
+> chance — does not generalize across speeds); cross-drone skipped (single-class
+> test sets). See `results/uav_holdouts.json`.
+>
+> **Bottom line:** the model learns real fault structure on DronePropA
+> (permutation p=0.003, cross-trajectory 0.73) but cross-dataset transfer to
+> TII is NOT cleanly established (domain classifier macro-F1 = 1.0, healthy
+> recall 9/19, cross-speed 0.46). The 0.929 was amplitude-inflated; the 0.74
+> shape-only score remains domain-confounded. The contribution is the
+> adversarial-validation pipeline that detected this, not a cross-dataset
+> transfer number.
 
 ### Provenance and honesty
 
