@@ -5,13 +5,42 @@
 [![CI](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/actions/workflows/ci.yml/badge.svg)](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/actions/workflows/ci.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![ROS2](https://img.shields.io/badge/ROS2-Humble-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
-[![CNN Accuracy](https://img.shields.io/badge/CNN_Accuracy-reported_98.4%25-yellow.svg)](#-model-performance)
+[![ROS2](https://img.shields.io/badge/ROS2-Humble_(prototype_node)-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
+[![Evaluation](https://img.shields.io/badge/evaluation-leakage--audited-brightgreen.svg)](#what-i-learned-read-this-first)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**UAV Aegis** is an end-to-end diagnostic and prognostic pipeline that detects, classifies, and predicts mechanical failures in UAV propellers and motors using high-frequency vibration signatures and Deep Learning.
+**UAV Aegis** is an end-to-end UAV propeller fault-diagnostics pipeline (data →
+features → model → evaluation → ROS2 deployment) built as a solo project. Its most
+important contribution is **not** a headline accuracy number — it is a rigorous,
+leakage-audited evaluation methodology that challenged the project's own early results
+and revised the claims when the evidence did not support them.
 
 </div>
+
+---
+
+## What I Learned (read this first)
+
+An early configuration reported **98.4%** classification accuracy. Under scrutiny that
+number did **not** hold up:
+
+- The 98.4% came from a **random window-level split**, which leaks near-duplicate
+  windows from the same flight into both train and test. Under a **run-grouped split**
+  (no flight crosses the train/test boundary), the honest number is substantially lower.
+- A separate **cross-dataset** transfer attempt (train DronePropA → test TII, both real
+  public datasets) reached **NOT ESTABLISHED**: a domain classifier separates the two
+  datasets at macro-F1 = 1.0 (100% separable), an amplitude ablation showed the naive
+  0.929 was ~40% driven by signal-scale differences, and the 0.74 shape-only score
+  remains **domain-confounded**.
+
+**The contribution is the methodology**: an adversarial-validation pipeline
+(run-grouped splits, amplitude ablation, permutation test with retrain-under-null,
+bootstrap CI, domain classifier, held-out trajectories) that **detects and reports
+leakage and domain confound instead of hiding it.** Reproducible result manifests live
+in `results/`. See [Known Limitations](#known-limitations) for the honest scope.
+
+> The `reported 98.4%` figure below is retained only as an *earlier, pre-grouping,
+> within-dataset* number — it is **not** a claim of real-world fault-diagnosis accuracy.
 
 ---
 
@@ -29,15 +58,16 @@ Mechanical faults like micro-cracks, blade chips, or motor imbalances are often 
 
 ## 2. 🛡️ The Solution: UAV Aegis v3
 
-This suite provides a professional end-to-end pipeline:
+End-to-end pipeline. Metrics below are stated with their evaluation protocol; see
+[What I Learned](#what-i-learned-read-this-first) for why the protocol matters.
 
-| # | Solution Layer | Technical Implementation | Benefit |
+| # | Solution Layer | Technical Implementation | Status / Benefit |
 |---|----------------|--------------------------|---------|
-| 1 | **Deep Intelligence** | 1D/2D CNN architectures | reported 98.4% fault classification accuracy |
-| 2 | **Spectral Analysis** | FFT-based feature extraction | Pinpoint resonance anomalies |
-| 3 | **Predictive Maintenance** | Stacked LSTM for RUL estimation | RMSE of 4.2 cycles for mission planning |
-| 4 | **Real-time Dashboard** | Hardened Streamlit Command Center | Fleet health monitoring at a glance |
-| 5 | **ROS2 Integration** | Live inference node for edge deployment | Onboard real-time diagnostics |
+| 1 | **Deep Intelligence** | 1D/2D CNN architectures | leakage-audited eval (run-grouped); early 98.4% was leakage-inflated |
+| 2 | **Spectral Analysis** | FFT-based feature extraction | sampling-rate-invariant features (see 24.41 Hz control-loop note) |
+| 3 | **Predictive Maintenance** | Stacked LSTM for RUL estimation | RMSE ~4.2 cycles (within-dataset) |
+| 4 | **Real-time Dashboard** | Streamlit Command Center | Fleet health monitoring |
+| 5 | **ROS2 Integration** | `ros2_inference_node.py` — **prototype** (not a hardware-validated deployment) | Onboard inference scaffold |
 
 ---
 
@@ -48,11 +78,11 @@ models, ROS2 integration, and the tooling/CI around it.
 
 | # | Domain | Details | Specifications |
 |---|--------|---------|----------------|
-| 1 | **CNN Fault Classifier** | 1D/2D CNN architectures for mechanical fault signature identification | reported 98.4% accuracy, 0.97 F1 (see reproducibility note) |
-| 2 | **RUL Prediction Engine** | Stacked LSTM for Remaining Useful Life estimation | RMSE ~4.2 cycles, temporal sequence modeling |
+| 1 | **CNN Fault Classifier** | 1D/2D CNN architectures for mechanical fault signature identification | run-grouped eval; earlier 98.4% shown to be leakage-inflated (see What I Learned) |
+| 2 | **RUL Prediction Engine** | Stacked LSTM for Remaining Useful Life estimation | RMSE ~4.2 cycles (within-dataset), temporal sequence modeling |
 | 3 | **Spectral Engineering** | FFT-based feature extraction pipeline for resonance anomaly detection | Dominant frequency tracking, spectral entropy |
 | 4 | **Data Pipeline** | Sliding-window segmentation (`build_ml_dataset_v2.py`) with per-window run_id for run-grouped splitting; augmentation applied post-split (train only) | Multi-channel sensor sync |
-| 5 | **ROS2 Integration** | `ros2_inference_node.py` for live diagnostics + topic management | ROS2 Humble, real-time messaging |
+| 5 | **ROS2 Integration** | `ros2_inference_node.py` — **prototype** inference node (not hardware-validated) | ROS2 Humble, real-time messaging scaffold |
 | 6 | **Command Center Dashboard** | Streamlit monitoring dashboard for fleet visualization | Real-time telemetry, fault logging |
 | 7 | **Synthetic Data Generation** | NVIDIA Isaac Sim for physics-accurate fault data in simulated flight | Fault-pattern injection |
 | 8 | **Validation & CI** | Smoke tests (config/module import, benchmark exec, batch-shape) + CI | pytest, CI-enforced (no failure masking) |
@@ -100,9 +130,9 @@ graph TD
 
 | # | Metric | CNN v3 (Classification) | LSTM (RUL Prediction) |
 |---|--------|------------------------|-----------------------|
-| 1 | **Accuracy** | **98.4%** | — |
-| 2 | **F1-Score** | **0.97** | — |
-| 3 | **RMSE** | — | **4.2 Cycles** |
+| 1 | **Accuracy** | 98.4% — ⚠️ *random-split, leakage-inflated (see What I Learned)* | — |
+| 2 | **F1-Score** | 0.97 — ⚠️ *same caveat* | — |
+| 3 | **RMSE** | — | 4.2 Cycles *(within-dataset)* |
 
 > **Reproducibility & methodology note.** The accuracy/F1/RMSE figures above are
 > values reported from earlier training runs. Two honesty caveats:
@@ -372,6 +402,36 @@ the pipeline importable and the benchmark runnable on every push:
 | 2 | **Stacked LSTM** | Temporal dependency capture | Higher accuracy in degradation prediction |
 | 3 | **ROS2 Humble** | Industry standard middleware | Robust real-time message passing |
 | 4 | **Synthetic Training** | NVIDIA Isaac Sim data | Rare fault scenarios captured |
+
+---
+
+## Known Limitations
+
+Stated explicitly, because honest scope is part of the contribution.
+
+- **Headline accuracy was leakage-inflated.** The early 98.4% used a random
+  window-level split (near-duplicate windows from one flight on both sides). Only
+  **run-grouped** numbers should be trusted; treat any within-dataset figure as
+  optimistic and protocol-dependent.
+- **Cross-dataset transfer is NOT ESTABLISHED.** DronePropA→TII is domain-confounded
+  (domain classifier macro-F1 = 1.0 — the datasets are 100% separable). The naive 0.929
+  was ~40% amplitude-driven; the 0.74 shape-only score remains confounded. No claim of
+  cross-platform generalization is made.
+- **Synthetic vs real.** Some experiments use Isaac Sim / generated fault data. Synthetic
+  results are labeled as such and do not imply real-flight performance; a model may learn
+  the generator's signature rather than fault physics.
+- **ROS2 node is a prototype.** `ros2_inference_node.py` is an inference scaffold, not a
+  hardware-validated, timing-guaranteed deployment. No hardware-in-the-loop results.
+- **Single platform / hover, controlled conditions.** Real datasets used are indoor /
+  limited-condition; results do not cover wind, dynamic flight, or diverse airframes.
+- **RUL RMSE (~4.2 cycles) is within-dataset** and not validated across operating
+  conditions.
+- **24.41 Hz artifact.** An apparent "propeller RPM" peak was found to be a control-loop
+  rate (1000/41 Hz), so order-normalized (1P/2P) features are deliberately avoided; the
+  feature set is sampling-rate-invariant for cross-dataset comparability.
+
+Reproducible evidence for these statements lives in `results/` (schema-validated manifests
+with `evidence_class`, `git_sha`, `dataset_sha256`, `seed`, `split`).
 
 ---
 
