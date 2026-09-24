@@ -18,6 +18,7 @@ Run after sourcing ROS2:
 
 import argparse
 import collections
+import math
 import sys
 import time
 from pathlib import Path
@@ -208,12 +209,28 @@ def main():
             self.sample_count = 0
 
         def cb_imu(self, msg: Imu):
-            # Build feature vector: acc x,y,z then gyro x,y,z, then RPMs (zeros if not available)
-            arr = [
-                msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z,
-                msg.angular_velocity.x, msg.angular_velocity.y, msg.angular_velocity.z,
-                0.0, 0.0, 0.0, 0.0  # RPM placeholders
-            ]
+            # Build the feature row in the model's channel order (meta-driven,
+            # 13-channel capable). RPY comes from the orientation quaternion;
+            # RPM channels are zero-filled unless provided by the platform.
+            q = msg.orientation
+            roll = math.atan2(2.0 * (q.w * q.x + q.y * q.z),
+                              1.0 - 2.0 * (q.x * q.x + q.y * q.y))
+            sinp = 2.0 * (q.w * q.y - q.z * q.x)
+            pitch = (math.copysign(math.pi / 2.0, sinp) if abs(sinp) >= 1.0
+                     else math.asin(sinp))
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                            1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            fields = {
+                "acc_x": msg.linear_acceleration.x,
+                "acc_y": msg.linear_acceleration.y,
+                "acc_z": msg.linear_acceleration.z,
+                "gyro_x": msg.angular_velocity.x,
+                "gyro_y": msg.angular_velocity.y,
+                "gyro_z": msg.angular_velocity.z,
+                "roll": roll, "pitch": pitch, "yaw": yaw,
+                "rpm1": 0.0, "rpm2": 0.0, "rpm3": 0.0, "rpm4": 0.0,
+            }
+            arr = [float(fields.get(v, 0.0)) for v in var_list]
             self.win.append(arr)
             self.sample_count += 1
             

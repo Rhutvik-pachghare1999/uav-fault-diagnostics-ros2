@@ -198,6 +198,8 @@ python3 scripts/benchmarks/run_benchmark.py
 # ============================================================================
 echo "Generating report figures..."
 python3 scripts/make_report_plots.py --run-root isaac_dataset --results results --out-dir results/figures
+echo "Generating architecture diagrams..."
+python3 scripts/make_architecture_diagrams.py --out-dir results/figures
 
 # ============================================================================
 # Step 7: Test ROS2 Package
