@@ -1,20 +1,22 @@
 """Smoke tests – fast, no model weights required."""
 import importlib
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-# Make repo root importable
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Make scripts directory importable
+SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
 def test_config_importable():
     """config.py must be importable without errors."""
     spec = importlib.util.spec_from_file_location(
-        "config", Path(__file__).parent.parent / "config.py"
+        "config", SCRIPTS_DIR / "config.py"
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -24,7 +26,7 @@ def test_config_importable():
 # ── Severity utils ────────────────────────────────────────────────────────────
 def test_severity_utils_importable():
     spec = importlib.util.spec_from_file_location(
-        "severity_utils", Path(__file__).parent.parent / "severity_utils.py"
+        "severity_utils", SCRIPTS_DIR / "severity_utils.py"
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -35,10 +37,14 @@ def test_severity_utils_importable():
 def test_benchmark_smoke(tmp_path, monkeypatch):
     """run_benchmark.py --smoke must complete without exception."""
     monkeypatch.chdir(tmp_path)
+    # Set results dir to tmp_path for isolation
+    env = os.environ.copy()
+    env["BENCHMARK_RESULTS_DIR"] = str(tmp_path / "results")
     import subprocess, sys
     result = subprocess.run(
-        [sys.executable, str(Path(__file__).parent.parent / "benchmarks" / "run_benchmark.py"), "--smoke"],
-        capture_output=True, text=True
+        [sys.executable, str(SCRIPTS_DIR / "benchmarks" / "run_benchmark.py"), "--smoke"],
+        capture_output=True, text=True,
+        env=env
     )
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "results" / "benchmark_metrics.csv").exists()

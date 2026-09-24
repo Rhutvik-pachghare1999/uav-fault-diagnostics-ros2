@@ -1,3 +1,13 @@
-
 __pycache__/
 *.pyc
+
+# Large regenerable artifacts (rebuild via reproduce.sh):
+#  - ML datasets (windowed / augmented HDF5)
+*.h5
+#  - Raw simulator flight logs (300+ MB; meta.json manifests ARE tracked)
+isaac_dataset/**/*.csv
+isaac_dataset_legacy/
+#  - ROS2 workspace build output (colcon)
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/

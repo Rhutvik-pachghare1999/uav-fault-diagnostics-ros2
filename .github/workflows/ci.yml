@@ -42,7 +42,7 @@ jobs:
 
       # ── Benchmark smoke-test ────────────────────────────────────────────────
       - name: Run benchmark script
-        run: python benchmarks/run_benchmark.py --smoke
+        run: python scripts/benchmarks/run_benchmark.py --smoke
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4

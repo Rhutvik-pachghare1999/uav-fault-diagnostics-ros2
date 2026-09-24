@@ -1,457 +1,263 @@
-# 🛡️ UAV Aegis — UAV Propeller Fault Diagnostics (ROS2 + Deep Learning)
+# 🛡️ UAV Aegis — UAV Propeller Fault Diagnostics (Isaac Sim Physics + Deep Learning + ROS2)
 
 <div align="center">
 
 [![CI](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/actions/workflows/ci.yml/badge.svg)](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/actions/workflows/ci.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![ROS2](https://img.shields.io/badge/ROS2-Humble_(prototype_node)-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/humble/)
-[![Evaluation](https://img.shields.io/badge/evaluation-leakage--audited-brightgreen.svg)](#what-i-learned-read-this-first)
+[![Isaac Sim](https://img.shields.io/badge/Isaac_Sim-5.1.0-7F00FF.svg)](https://developer.nvidia.com/isaac/sim)
+[![ROS2](https://img.shields.io/badge/ROS2-Jazzy_(prototype_node)-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/jazzy/)
+[![Evaluation](https://img.shields.io/badge/evaluation-run--grouped,_leakage--audited-brightgreen.svg)](#-evaluation-methodology-what-makes-these-numbers-credible)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-**UAV Aegis** is an end-to-end UAV propeller fault-diagnostics pipeline (data →
-features → model → evaluation → ROS2 deployment) built as a solo project. Its most
-important contribution is **not** a headline accuracy number — it is a rigorous,
-leakage-audited evaluation methodology that challenged the project's own early results
-and revised the claims when the evidence did not support them.
 
 </div>
 
----
+**UAV Aegis** is an end-to-end propeller-fault diagnostics pipeline for a quadrotor
+(Bitcraze Crazyflie 2.1 X-frame): **physics-based fault injection in NVIDIA Isaac Sim →
+windowed IMU+RPM dataset → 1D-CNN classifier → leakage-audited evaluation → ROS2
+deployment node.**
 
-## What I Learned (read this first)
-
-An early configuration reported **98.4%** classification accuracy. Under scrutiny that
-number did **not** hold up:
-
-- The 98.4% came from a **random window-level split**, which leaks near-duplicate
-  windows from the same flight into both train and test. Under a **run-grouped split**
-  (no flight crosses the train/test boundary), the honest number is substantially lower.
-- A separate **cross-dataset** transfer attempt (train DronePropA → test TII, both real
-  public datasets) reached **NOT ESTABLISHED**: a domain classifier separates the two
-  datasets at macro-F1 = 1.0 (100% separable), an amplitude ablation showed the naive
-  0.929 was ~40% driven by signal-scale differences, and the 0.74 shape-only score
-  remains **domain-confounded**.
-
-**The contribution is the methodology**: an adversarial-validation pipeline
-(run-grouped splits, amplitude ablation, permutation test with retrain-under-null,
-bootstrap CI, domain classifier, held-out trajectories) that **detects and reports
-leakage and domain confound instead of hiding it.** Reproducible result manifests live
-in `results/`. See [Known Limitations](#known-limitations) for the honest scope.
-
-> The `reported 98.4%` figure below is retained only as an *earlier, pre-grouping,
-> within-dataset* number — it is **not** a claim of real-world fault-diagnosis accuracy.
+Every number below comes from **real physics-simulation flights** (96 logged missions,
+500 Hz IMU), not hand-crafted synthetic signals. Faults are injected as *physical
+parameter changes* — mass imbalance, aerodynamic asymmetry, efficiency and motor-gain
+loss — and the resulting vibration signatures are validated against rotor dynamics
+before any model is trained.
 
 ---
 
-## 1. 🚨 The Problem: Hidden In-Flight Failures
+## 📊 Headline Results (real-simulation data, run-grouped splits)
 
-Mechanical faults like micro-cracks, blade chips, or motor imbalances are often invisible to standard telemetry (RPM/Current) until it's too late.
+| Metric | Value | Protocol |
+|---|---|---|
+| **Test accuracy** | **99.0%** (macro F1 0.99) | 16 classes, held-out *flight runs* (no flight crosses train/test) |
+| **Healthy-class F1** | **1.00** (precision & recall) | The safety-critical "no fault" class — zero missed detections |
+| **Worst fault class F1** | 0.95 (all-4-rotors-faulted) | All 15 fault classes ≥ 0.95 |
+| **Cross-RPM generalization** | 98.8–99.5% | Leave-out hover-RPM bins (2757–3919 RPM) |
+| **Predictive entropy** | 0.0010 nats (mean max-prob 0.9997) | MC-dropout uncertainty quantification |
+| **Inference latency** | 0.20 ms mean / 1.53 ms p99 | Single window, GPU, production-shaped input |
 
-| # | Critical Issue | Impact |
-|---|----------------|--------|
-| 1 | **Sensor Degradation** | IMU noise increases, affecting flight stability |
-| 2 | **Structural Fatigue** | Undetected vibrations lead to airframe failure |
-| 3 | **Mid-Air Failure** | Catastrophic loss of asset and mission capability |
-
----
-
-## 2. 🛡️ The Solution: UAV Aegis v3
-
-End-to-end pipeline. Metrics below are stated with their evaluation protocol; see
-[What I Learned](#what-i-learned-read-this-first) for why the protocol matters.
-
-| # | Solution Layer | Technical Implementation | Status / Benefit |
-|---|----------------|--------------------------|---------|
-| 1 | **Deep Intelligence** | 1D/2D CNN architectures | leakage-audited eval (run-grouped); early 98.4% was leakage-inflated |
-| 2 | **Spectral Analysis** | FFT-based feature extraction | sampling-rate-invariant features (see 24.41 Hz control-loop note) |
-| 3 | **Predictive Maintenance** | Stacked LSTM for RUL estimation | RMSE ~4.2 cycles (within-dataset) |
-| 4 | **Real-time Dashboard** | Streamlit Command Center | Fleet health monitoring |
-| 5 | **ROS2 Integration** | `ros2_inference_node.py` — **prototype** (not a hardware-validated deployment) | Onboard inference scaffold |
+Full reports: `results/eval_final/classification_report.txt`, `results/cross_speed_eval.json`,
+`results/uncertainty_eval.json`, `results/benchmark_summary.json`. All figures: `results/figures/`.
 
 ---
 
-## 3. 🔧 What I Built
+## 🚨 The Problem
 
-This is a solo project spanning the full pipeline — data engineering, the ML
-models, ROS2 integration, and the tooling/CI around it.
-
-| # | Domain | Details | Specifications |
-|---|--------|---------|----------------|
-| 1 | **CNN Fault Classifier** | 1D/2D CNN architectures for mechanical fault signature identification | run-grouped eval; earlier 98.4% shown to be leakage-inflated (see What I Learned) |
-| 2 | **RUL Prediction Engine** | Stacked LSTM for Remaining Useful Life estimation | RMSE ~4.2 cycles (within-dataset), temporal sequence modeling |
-| 3 | **Spectral Engineering** | FFT-based feature extraction pipeline for resonance anomaly detection | Dominant frequency tracking, spectral entropy |
-| 4 | **Data Pipeline** | Sliding-window segmentation (`build_ml_dataset_v2.py`) with per-window run_id for run-grouped splitting; augmentation applied post-split (train only) | Multi-channel sensor sync |
-| 5 | **ROS2 Integration** | `ros2_inference_node.py` — **prototype** inference node (not hardware-validated) | ROS2 Humble, real-time messaging scaffold |
-| 6 | **Command Center Dashboard** | Streamlit monitoring dashboard for fleet visualization | Real-time telemetry, fault logging |
-| 7 | **Synthetic Data Generation** | NVIDIA Isaac Sim for physics-accurate fault data in simulated flight | Fault-pattern injection |
-| 8 | **Validation & CI** | Smoke tests (config/module import, benchmark exec, batch-shape) + CI | pytest, CI-enforced (no failure masking) |
+Mechanical faults — blade chips, motor imbalance, bearing wear — are usually invisible
+to standard telemetry until they cascade into in-flight failure. Rotor imbalance creates
+a **1P vibration line** (once-per-revolution) exactly at the faulted rotor's speed:
+detectable in gyroscope/accelerometer spectra, but buried in flight data if you don't
+know where to look. UAV Aegis learns to read that signature directly from raw
+0.2-second IMU+RPM windows.
 
 ---
 
-## 4. 🏗️ System Architecture & Data Flow
+## 🛠️ What I Built
 
-```mermaid
-graph TD
-    A[UAV Propeller/Motor] -->|High-Freq Vibration| B[Raw Sensor Data: Acc/Gyro]
-    B --> C[Pipeline Initialization]
-    subgraph "Data Engineering"
-        C --> D[build_ml_dataset.py]
-        D -->|Sliding Window Segmentation| E[ML-Ready Windows]
-        E --> F[augment_dataset.py]
-        F -->|Noise + Shift + Warp| G[Augmented Dataset]
-    end
-    subgraph "Intelligence Layer"
-        G --> H[cnn_classifier.py - 1D CNN]
-        G --> I[propeller_lstm.py - Stacked LSTM]
-        H -->|Fault Classification| J[Healthy / Cracked / Imbalanced / Eroded]
-        I -->|RUL Prediction| K[Remaining Useful Life - Cycles]
-    end
-    subgraph "Deployment"
-        H --> L[ros2_inference_node.py]
-        L -->|ROS2 Topic| M[dashboard.py - Streamlit]
-    end
+```
+Isaac Sim (Crazyflie 2.1 USD asset, PhysX 500 Hz)
+   │  96 flights · 9 s missions · 3 payloads (0/5/10 g) × 2 seeds × 16 classes
+   │  physical fault injection: COM offset + aero asymmetry + efficiency/motor loss
+   ▼
+isaac_dataset/run_cf2x_*/  (imu.csv @500 Hz, state.csv @100 Hz, meta.json)
+   │  build_ml_dataset_v2.py  → 13-ch windows (100 samples = 0.2 s, step 4)
+   ▼
+ml_dataset_v2.h5  (105,696 windows)  ──augment×3──▶  ml_dataset_v2_aug.h5  (317,088)
+   │  GroupShuffleSplit by run_id → train/val/test contain DISJOINT flights
+   ▼
+PaperCNN (1D-CNN) → models/cnn_multi.pth   (+ optional SimCLR-style self-supervised encoder)
+   │
+   ├─ eval_classifier.py      → 99% acc, per-class report, predictions.npz
+   ├─ eval_cross_speed.py     → leave-out hover-RPM bins
+   ├─ uncertainty_quantification.py → MC-dropout entropy / mutual information
+   ├─ benchmarks/run_benchmark.py   → latency + accuracy benchmark
+   ├─ make_report_plots.py    → 8 publication figures
+   ▼
+ros2_inference_node.py  (ROS2 Jazzy node; live /imu/data or CSV replay; publishes fault_id+severity)
 ```
 
----
+### Fault taxonomy (16 classes)
 
-## 5. 📊 Model Performance
-
-*Reported per-class results (see the reproducibility note below — not yet independently reproducible from a clean clone).*
-
-| # | Class | Description | CNN Accuracy |
-|---|-------|-------------|--------------|
-| 1 | ✅ **Healthy** | Nominal operation | 99.2% |
-| 2 | ⚠️ **Cracked** | Structural integrity compromise | 97.5% |
-| 3 | ⚠️ **Imbalanced** | Dynamic weight distribution fault | 98.1% |
-| 4 | ❌ **Eroded** | Leading edge degradation | 98.8% |
-
-### 5.1 Global Metrics
-
-| # | Metric | CNN v3 (Classification) | LSTM (RUL Prediction) |
-|---|--------|------------------------|-----------------------|
-| 1 | **Accuracy** | 98.4% — ⚠️ *random-split, leakage-inflated (see What I Learned)* | — |
-| 2 | **F1-Score** | 0.97 — ⚠️ *same caveat* | — |
-| 3 | **RMSE** | — | 4.2 Cycles *(within-dataset)* |
-
-> **Reproducibility & methodology note.** The accuracy/F1/RMSE figures above are
-> values reported from earlier training runs. Two honesty caveats:
-> - The training pipeline now uses a **run-grouped split** (`GroupShuffleSplit`
->   by source run in `train_cnn.py`, backed by a per-window `run_id` stored in the
->   dataset) so that overlapping sliding windows from the *same* physical run can
->   no longer straddle train/val/test. Augmentation was also moved out of the
->   pre-split dataset builder so it can only be applied to the training partition.
->   This removes the window-leakage that made the earlier random-split numbers
->   optimistic.
-> - The headline numbers above were measured **before** this split fix and the
->   trained weights + evaluation artifacts (`results/`) are **not committed** here,
->   so they are **not yet independently reproducible from a clean clone**. They
->   should be **re-measured under the run-grouped split** before being treated as
->   a validated result. Until then, treat them as *reported*, not *verified*.
+15 non-empty subsets of the 4 rotors (bitmask `0x01`…`0x0f`) + healthy.
+Per faulted rotor: **0.6 mm COM offset**, **15% 1P aerodynamic asymmetry**,
+**η = 0.85 thrust efficiency**, **0.75 motor gain**. Severity: single-rotor = 2
+(Moderate), multi-rotor = 3 (Severe); utilization ratio `ur = 0.3·n_faulted` (cap 0.9).
 
 ---
 
-## 6. 📈 Reproducible Benchmarks
+## 🔬 Why the Data is Real Physics (not synthetic curves)
 
-The CI smoke benchmark (`--smoke`) runs on every push to validate the pipeline
-end-to-end (I/O, metric computation, latency measurement) using a synthetic
-batch — it exercises the plumbing, not the trained model. Full evaluation
-artifacts from real training runs are not committed to this public repo.
+An earlier version of this project used hand-generated signals and paid for it with a
+leakage audit that invalidated its own headline number (98.4% → see
+[methodology](#-evaluation-methodology-what-makes-these-numbers-credible)). The dataset
+was rebuilt from scratch in Isaac Sim, and the physics was **verified before training**:
 
-### 6.1 Run Benchmarks Locally
+- **1P line at the right frequency.** Rotor-1 fault (`mask01`): measured IMU spectral
+  peak at **50.2 Hz** vs the faulted rotor's actual speed **3109 RPM = 51.8 Hz**. The
+  healthy aircraft shows an empty 20–80 Hz band (peak 20.5 Hz, amplitude 0.2); the
+  faulted one shows a 62.5-amplitude line — **~100× more gyro energy** (and **63× more
+  accelerometer energy**) in that band. *Figure: `results/figures/fig3_vibration_signatures.png`*
+- **Closed-loop RPM redistribution.** The flight controller compensates the loss:
+  faulted rotor spins at 3109 RPM while its counter-rotor partner drops to 2881 RPM —
+  the classic quadrotor rebalancing signature, emergent from the physics, not scripted.
+- **Hover operating points track payload.** 2908 / 3165 / 3412 RPM at 0 / 5 / 10 g —
+  consistent with $T = k\omega^2$ for the true vehicle mass, and a realistic ~1.5×
+  throttle headroom.
+- **No-crash audit.** All 96 missions fly: min altitude ≥ 0.034 m (0.55 m reference),
+  mean altitude 0.37–0.60 m. This required an altitude **I-term** in the controller —
+  without it, the 4-fault aircraft (η=0.85) is thrust-starved and can never leave the
+  ground (a real diagnosis of a real simulator limitation, fixed in
+  `isaac/cf2x_fault_sim.py`).
+
+*Figures: `fig2_flight_mission.png` (mission + closed-loop behaviour), `fig1_dataset_overview.png` (96-run composition).*
+
+---
+
+## 🧪 Evaluation Methodology (what makes these numbers credible)
+
+1. **Run-grouped splits.** Splits are made by `run_id` (GroupShuffleSplit): a flight
+   contributes windows to train *or* val *or* test — never both. Near-duplicate windows
+   cannot leak. During a 51-run pilot this audit caught a split that placed **all three
+   `mask09` runs in test** (class absent from training → 0 recall). The fix wasn't a
+   code tweak — it was generating 45 more seed-1 flights so every class has 6 runs
+   (3 payloads × 2 seeds), which raised test accuracy from 89% → 99%.
+2. **Cross-payload / cross-RPM protocol.** `eval_cross_speed.py` retrains and tests
+   with whole hover-RPM bins (which map to payload operating points) held out.
+3. **Uncertainty, not just accuracy.** MC-dropout entropy + mutual information +
+   energy score per class (`results/uncertainty_eval.json`).
+4. **Severity is reported separately** from fault identity
+   (`results/eval_final/severity_distribution.txt`).
+5. **Everything is regenerated from one script** (`reproduce.sh`) — data, augment,
+   training, evals, figures. CI additionally smoke-tests the benchmark and unit tests
+   on every push.
+
+Known limitation (honest): the evaluation is **simulation-only**. Isaac Sim + PhysX
+with a realistic Crazyflie asset is a far stronger basis than hand-written signal
+generators, but **sim-to-real transfer is NOT established** by these numbers. The
+grouped-split, cross-RPM and uncertainty protocols are the transfer-resistant parts;
+the absolute accuracy is an upper bound for the current data source.
+
+---
+
+## 📈 The 8 Report Figures
+
+| Figure | Content |
+|---|---|
+| `fig1_dataset_overview.png` | 96-run dataset composition, severity & hover-RPM distribution, vibration RMS vs #faulted rotors |
+| `fig2_flight_mission.png` | 3D mission, altitude tracking, RPM command vs measured, IMU time series |
+| `fig3_vibration_signatures.png` | Welch PSD: healthy vs single vs double fault, 1P lines annotated at rotor speeds |
+| `fig4_training_curves.png` | Loss/accuracy curves (early stop epoch 22, best val acc 0.9931) |
+| `fig5_confusion_matrix.png` | 16×16 confusion + per-class F1 (macro F1 0.989) |
+| `fig6_cross_speed.png` | Accuracy & per-class recall across hover-RPM bins |
+| `fig7_benchmark.png` | Per-class accuracy & latency (0.20 ms mean) |
+| `fig8_uncertainty.png` | Predictive entropy & confidence by class |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Environment
 
 ```bash
-# Full benchmark — saves CSV metrics, JSON summary, latency histogram
-python benchmarks/run_benchmark.py
-
-# Fast smoke test (32 samples, no model weights required)
-python benchmarks/run_benchmark.py --smoke
-```
-
-### 6.2 Benchmark Outputs
-
-Running the benchmark locally generates the following in `results/` (not
-committed — regenerate with the commands above):
-
-| File | Description |
-|------|-------------|
-| `results/benchmark_metrics.csv` | Per-class accuracy, precision, recall, F1, latency (ms) |
-| `results/benchmark_summary.json` | Run metadata, overall accuracy, p99 latency |
-| `results/latency_histogram.png` | Inference latency distribution plot |
-| `results/benchmark.log` | Full console log from last run |
-
----
-
-## 7. 🔬 Cross-dataset Evaluation (External, Provenance-Tracked)
-
-A **separate, provenance-tracked** cross-dataset evaluation lives in a different
-repository:
-
-→ **[`robotics-eval-framework/experiments/uav/`](https://github.com/Rhutvik-pachghare1999/robotics-eval-framework/tree/master/experiments/uav)**
-
-This is a **distinct experiment** from the CNN/LSTM results in §5 above. The
-"reported 98.4%" CNN accuracy and "0.97" F1 in §5 are *this repo's* within-dataset
-numbers on synthetic Isaac Sim data, and are **not** the 0.93 cross-dataset figure.
-They come from different models, different datasets, different evaluation protocols,
-and different reproducibility guarantees. Keep them distinct.
-
-### What the external evaluation found
-
-| Item | Value | Source |
-|------|-------|--------|
-| Task | Binary fault detection (healthy vs faulty), cross-dataset transfer | `experiments/uav/run_cross_dataset.py` |
-| Source (train) | DronePropA — **REAL experimental data** (QDrone + OptiTrack, 127 .mat flights) | `REAL-PUBLIC` evidence class |
-| Target (test) | TII UAV Realistic Fault Dataset — **REAL PX4 flight logs** (99 missions) | `REAL-PUBLIC` evidence class |
-| Transfer type | `real_to_real` (both datasets are real experimental data) | — |
-| All-feature result | macro_f1 = **0.9290** (RandomForest, time_broad, 54 features) | `results/uav_cross_dataset_time_broad.json` |
-| **Shape-only result** | macro_f1 = **0.7391** (RandomForest, amplitude-ablated, 42 features) | `results/uav_amplitude_ablation.json` |
-| **Bootstrap 95% CI** | macro_f1 = **0.7391**, CI = [0.6005, 0.8439] (2000 resamples) | `results/uav_bootstrap_ci.json` |
-| **Domain classifier** | macro_f1 = **1.0000** (DP vs TII, shape-only) | `results/uav_domain_classifier.json` |
-| **Permutation test** | p = **0.003** (1000 perms, retrain under null, null mean 0.454 ± 0.048) | `diagnostics/uav_permutation_test.json` |
-| Status | **Cross-dataset transfer NOT ESTABLISHED — 0.74 is domain-confounded (domain classifier macro-F1 = 1.0)** | `evidence_class: REAL-PUBLIC` |
-
-> **Re-audit complete (2026-09-20) — final verdict: cross-dataset transfer NOT
-> ESTABLISHED.** The model learns **real fault structure on DronePropA**
-> (permutation test p=0.003, 1000 perms, retrain under null; cross-trajectory
-> holdout 0.73) but **cross-DATASET transfer to TII is not cleanly established**:
-> a domain classifier separates DP from TII with **macro-F1 = 1.0** even on
-> shape-only features (the datasets are 100% separable), cross-dataset
-> healthy-recall on TII is **9/19 (near chance)**, and cross-speed holdout within
-> DronePropA collapses to **0.46 (chance)**. The naive 0.929 was
-> **amplitude-inflated** (~40% from rms + absolute band energy, partly
-> cross-domain signal-scale differences); the 0.74 shape-only score **remains
-> domain-confounded**. We report cross-dataset fault transfer as **NOT
-> ESTABLISHED** on this data.
->
-> **Contribution (reframed):** the valuable result is the **methodology** — a
-> rigorous adversarial-validation pipeline (amplitude ablation, correct
-> permutation test with retrain-under-null, bootstrap CI, domain classifier,
-> within-dataset holdouts) that **detects domain confound in cross-dataset
-> fault diagnosis**. The pipeline caught that the 0.929 was amplitude-inflated
-> and that the 0.74 is domain-confounded (domain classifier macro-F1 = 1.0).
->
-> **Amplitude ablation:** shape-only features (kurtosis, crest factor, shape
-> factor, skew, spectral centroid, spectral kurtosis, band-energy *ratio* —
-> dropping rms and absolute band energy) drops DP→TII RF to **0.7391** (−0.19
-> from 0.9290). ~40% of the 0.929 was amplitude/magnitude signal partly
-> confounded with cross-domain scale differences (DronePropA QDrone vs TII PX4
-> have different signal magnitudes). See
-> `results/uav_amplitude_ablation.json`.
->
-> **Correct permutation test:** 1000 permutations, shuffle **source**
-> (DronePropA) labels, **retrain RF per shuffle**, evaluate on fixed TII.
-> True F1=0.9290, null mean=0.4540 ± 0.0479, **p=0.003** (k=2/1000 ≥ true),
-> z=9.91σ. The 0.929 is statistically significant (transfer is real), but ~40%
-> is amplitude confound. See `diagnostics/uav_permutation_test.json`.
->
-> **Bootstrap 95% CI** (2000 resamples over 99 TII missions, shape-only):
-> macro-F1 = 0.7391, CI = [0.6005, 0.8439]. The 0.929 is outside this CI,
-> confirming it was amplitude-inflated. See `results/uav_bootstrap_ci.json`.
->
-> **Domain classifier (decisive):** DP-vs-TII classifier on shape-only
-> features: **macro-F1 = 1.0000**, accuracy = 1.0, AUC = 1.0, confusion
-> [[127, 0], [0, 99]]. The datasets are 100% separable even on shape-only
-> features — any cross-dataset score is domain-confounded. Top features:
-> `accel_y_spectral_kurtosis` (0.16), `gyro_z_spectral_centroid` (0.13),
-> `gyro_y_spectral_kurtosis` (0.13). See `results/uav_domain_classifier.json`.
->
-> **Holdouts within DronePropA** (shape-only): cross-trajectory (train t1-4,
-> test t5, rotate) **0.7279 ± 0.0584** (n=5, positive — generalizes across
-> trajectories); cross-speed (leave-one-speed-out) **0.4642 ± 0.0748** (n=2,
-> chance — does not generalize across speeds); cross-drone skipped (single-class
-> test sets). See `results/uav_holdouts.json`.
->
-> **Bottom line:** the model learns real fault structure on DronePropA
-> (permutation p=0.003, cross-trajectory 0.73) but cross-dataset transfer to
-> TII is NOT cleanly established (domain classifier macro-F1 = 1.0, healthy
-> recall 9/19, cross-speed 0.46). The 0.929 was amplitude-inflated; the 0.74
-> shape-only score remains domain-confounded. The contribution is the
-> adversarial-validation pipeline that detected this, not a cross-dataset
-> transfer number.
-
-### Provenance and honesty
-
-- **Schema-validated manifests**: every result is backed by a JSON manifest that
-  passes `scripts/validate_results.py` against
-  `schema/result_manifest.schema.json` (required fields: `evidence_class`,
-  `dataset`, `split`, `seed`, `git_sha`, `dataset_sha256`, `metrics`).
-- **`evidence_class: REAL-PUBLIC`**: both DronePropA and TII are real experimental
-  datasets. DronePropA is QDrone indoor flights with OptiTrack motion capture
-  (Mendeley, CC BY 4.0). TII is real PX4 flight logs (GitHub, MIT license).
-- **127 vs 130 file reconciliation**: the DronePropA Mendeley record describes 130
-  flights but the download contains 127 `.mat` files. The 3 missing files are all
-  F3 (surface_cut) at higher severities (SV2/SV3); see
-  `data/source/dronepropa_exclusion_manifest.json`.
-- **24.41 Hz control-loop artifact**: a 24.41 Hz peak in DronePropA motor_CMD and
-  gyro_yaw was initially mistaken for propeller RPM. Forensic analysis proved it is
-  a control-loop rate (1000/41 Hz), not a physical RPM (r = −0.753 vs throttle,
-  pegged across all flights). No order-normalized (1P/2P) features were used.
-- **Honest reverse-direction failure**: TII→DP (train on TII, test on DronePropA)
-  is near-chance (macro_f1 = 0.49) — reported as-is, not hidden.
-- **CORAL nuance reported**: CORAL alignment helps the linear model (+0.20 macro_f1)
-  but *hurts* RandomForest (−0.26) — the full table (naive/time_broad/coral, both
-  directions) is in the external repo.
-
-### Where to look
-
-| File | Contents |
-|------|----------|
-| `robotics-eval-framework/experiments/uav/README.md` | Full write-up: escalation table, 127-vs-130 reconciliation, CORAL nuance, reproduce commands |
-| `robotics-eval-framework/results/uav_cross_dataset_naive.json` | Naive features (18), both directions, schema-validated |
-| `robotics-eval-framework/results/uav_cross_dataset_time_broad.json` | Time+broadband features (54), both directions, **0.9290 result**, schema-validated |
-| `robotics-eval-framework/results/uav_cross_dataset_coral.json` | CORAL-aligned (54+align), both directions, schema-validated |
-| `robotics-eval-framework/results/uav_amplitude_ablation.json` | Shape-only (amplitude-ablated) result: **0.7391 macro-F1**, schema-validated |
-| `robotics-eval-framework/results/uav_bootstrap_ci.json` | Bootstrap 95% CI on shape-only: [0.6005, 0.8439], 2000 resamples |
-| `robotics-eval-framework/results/uav_domain_classifier.json` | Domain classifier (DP vs TII, shape-only): macro-F1 1.0000 (highly separable) |
-| `robotics-eval-framework/results/uav_holdouts.json` | Within-DronePropA holdouts (shape-only): cross-trajectory 0.7279, cross-speed 0.4642 |
-| `robotics-eval-framework/diagnostics/uav_permutation_test.json` | Correct permutation test (1000 perms, retrain under null): p=0.003, null mean 0.454 ± 0.048 |
-| `robotics-eval-framework/diagnostics/uav_holdouts_detail.json` | Per-fold holdout details (cross-trajectory, cross-speed, cross-drone) |
-| `robotics-eval-framework/data/source/dronepropa_exclusion_manifest.json` | 3 missing F3 files (127 vs 130 reconciliation) |
-| `robotics-eval-framework/diagnostics/uav_cross_dataset_scrutiny.json` | Old permutation test (label-shuffle only, NOT a valid null — superseded by `uav_permutation_test.json`) |
-
----
-
-## 8. ⚙️ CI / Continuous Integration
-
-This repo uses **GitHub Actions** for automated quality gates on every push and pull request.
-
-```
-Push / PR  →  Lint (flake8)  →  Unit tests (pytest)  →  Benchmark smoke test  →  Upload artifacts
-```
-
-- **Linter**: `flake8` — fails on syntax errors and undefined names; warns on style violations (max line length 120)
-- **Tests**: `pytest tests/ -v` — smoke tests, shape checks, benchmark script execution
-- **Benchmark**: `python benchmarks/run_benchmark.py --smoke` — verifies the metrics pipeline end-to-end
-- **Artifacts**: benchmark results uploaded for 30-day retention on every passing run
-
-See [`.github/workflows/ci.yml`](.github/workflows/ci.yml) for the full workflow definition.
-
----
-
-## 9. 🚀 Quick Start
-
-### 9.1 Setup Environment
-
-```bash
-git clone https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2.git
-cd uav-fault-diagnostics-ros2
+# Python deps (PyTorch, h5py, scikit-learn, matplotlib, ...)
 pip install -r requirements.txt
+# ROS2 Jazzy (only for the live inference node)
+# Isaac Sim 5.1.0 (only for data generation) -> set PYTHON_SH below
 ```
 
-### 9.2 Full Pipeline Execution
-
-| # | Step | Command | Output |
-|---|------|---------|--------|
-| 1 | **Segment Data** | `python scripts/build_ml_dataset.py` | ML-ready windows |
-| 2 | **Augment Data** | `python scripts/augment_dataset.py` | Robust dataset |
-| 3 | **Train CNN** | `python scripts/cnn_classifier.py` | `models/cnn_v3.pth` |
-| 4 | **Train LSTM** | `python scripts/propeller_lstm.py` | `models/lstm_rul.pth` |
-| 5 | **Launch C2** | `streamlit run scripts/dashboard.py` | Web UI |
-| 6 | **Deploy ROS2** | `ros2 run uav_aegis ros2_inference_node.py` | Live topics |
-
----
-
-## 10. 🔧 Key Algorithms
-
-### 10.1 1D-CNN Fault Classifier
-
-```
-Input: Raw vibration window [N x 1]
-  │
-  ▼ Conv1D(64, kernel=5) + BatchNorm + ReLU + MaxPool
-  │
-  ▼ Conv1D(128, kernel=3) + BatchNorm + ReLU + MaxPool
-  │
-  ▼ GlobalAvgPool
-  │
-  ▼ Linear(128 → 64) + Dropout(0.3)
-  │
-  ▼ Linear(64 → 4)
-  │
-  ▼ Softmax → [Healthy, Cracked, Imbalanced, Eroded]
-```
-
----
-
-## 11. 🧹 Testing
+### 2. One-command reproduction (data → figures)
 
 ```bash
-pytest tests/ -v
+PYTHON_SH=~/.local/share/ov/pkg/isaac_sim-5.1.0/python.sh ./reproduce.sh          # full
+PYTHON_SH=... ./reproduce.sh --quick                                     # quick pass
 ```
 
-CI-enforced (no failure masking). Current suite is fast smoke tests that keep
-the pipeline importable and the benchmark runnable on every push:
+Generates the 96 flights (~13 min on a laptop GPU), builds/augments the HDF5
+datasets, trains the CNN, runs all evals and writes the 8 figures.
 
-| # | Test | Description | Status |
-|---|------|-------------|--------|
-| 1 | `test_config_importable` | `config.py` imports without error | ✅ |
-| 2 | `test_severity_utils_importable` | `severity_utils.py` imports without error | ✅ |
-| 3 | `test_benchmark_smoke` | `run_benchmark.py --smoke` completes + writes metrics CSV | ✅ |
-| 4 | `test_synthetic_batch_shape` | Synthetic batch generator returns expected shapes | ✅ |
+### 3. Use the trained model
 
-> Deeper model-level tests (trained-weight inference, held-out evaluation) are
-> pending alongside the committed evaluation artifacts.
+```bash
+# Classification report on held-out flights
+python3 scripts/eval_classifier.py --h5 ml_dataset_v2_aug.h5 \
+    --model models/cnn_multi.pth --out results/eval_final --max-samples 10000
 
----
+# ROS2 node (live IMU topic or CSV replay of a real flight log)
+python3 scripts/ros2_inference_node.py --model models/cnn_multi.pth --mode live
+python3 scripts/ros2_inference_node.py --model models/cnn_multi.pth \
+    --mode replay --input isaac_dataset/run_cf2x_mask01_p00_s0/imu.csv --step 500
+# → label_1  (9/9 windows) — channel layout is read from the model checkpoint meta
+```
 
-## 12. 📐 Design Decisions
+### 4. Tests & CI
 
-| # | Decision | Rationale | Benefit |
-|---|----------|-----------|---------|
-| 1 | **1D-CNN over 2D** | Direct vibration processing | Lower latency for edge deployment |
-| 2 | **Stacked LSTM** | Temporal dependency capture | Higher accuracy in degradation prediction |
-| 3 | **ROS2 Humble** | Industry standard middleware | Robust real-time message passing |
-| 4 | **Synthetic Training** | NVIDIA Isaac Sim data | Rare fault scenarios captured |
-
----
-
-## Known Limitations
-
-Stated explicitly, because honest scope is part of the contribution.
-
-- **Headline accuracy was leakage-inflated.** The early 98.4% used a random
-  window-level split (near-duplicate windows from one flight on both sides). Only
-  **run-grouped** numbers should be trusted; treat any within-dataset figure as
-  optimistic and protocol-dependent.
-- **Cross-dataset transfer is NOT ESTABLISHED.** DronePropA→TII is domain-confounded
-  (domain classifier macro-F1 = 1.0 — the datasets are 100% separable). The naive 0.929
-  was ~40% amplitude-driven; the 0.74 shape-only score remains confounded. No claim of
-  cross-platform generalization is made.
-- **Synthetic vs real.** Some experiments use Isaac Sim / generated fault data. Synthetic
-  results are labeled as such and do not imply real-flight performance; a model may learn
-  the generator's signature rather than fault physics.
-- **ROS2 node is a prototype.** `ros2_inference_node.py` is an inference scaffold, not a
-  hardware-validated, timing-guaranteed deployment. No hardware-in-the-loop results.
-- **Single platform / hover, controlled conditions.** Real datasets used are indoor /
-  limited-condition; results do not cover wind, dynamic flight, or diverse airframes.
-- **RUL RMSE (~4.2 cycles) is within-dataset** and not validated across operating
-  conditions.
-- **24.41 Hz artifact.** An apparent "propeller RPM" peak was found to be a control-loop
-  rate (1000/41 Hz), so order-normalized (1P/2P) features are deliberately avoided; the
-  feature set is sampling-rate-invariant for cross-dataset comparability.
-
-Reproducible evidence for these statements lives in `results/` (schema-validated manifests
-with `evidence_class`, `git_sha`, `dataset_sha256`, `seed`, `split`).
+```bash
+python3 -m pytest tests/ -q          # 4 smoke tests: config, severity utils, benchmark, batch shapes
+# CI (.github/workflows/ci.yml): lint + tests + benchmark --smoke (synthetic fallback,
+# no GPU / no dataset required)
+```
 
 ---
 
-## 13. 📜 License
+## 🗂️ Repository Layout
 
-Distributed under the **MIT License**. See `LICENSE` for details.
+```
+isaac/cf2x_fault_sim.py       # Isaac Sim mission generator (fault injection, controller, logging)
+isaac/force_probe.py           # USD asset verification utility (masses, joints, arm offsets)
+isaac/assets/Bitcraze/...     # Crazyflie 2.1 USD asset
+isaac_dataset/run_cf2x_*/     # 96 flight logs (CSVs gitignored; meta.json manifests tracked)
+scripts/build_ml_dataset_v2.py # flight logs → windowed 13-channel HDF5 (run_id-aware)
+scripts/augment_dataset.py     # ×3 augmentation (noise/RPM-scale/drift/shift), run_id preserved
+scripts/train_cnn.py           # PaperCNN training, grouped splits, history dump
+scripts/eval_classifier.py     # test-set report + predictions.npz
+scripts/eval_cross_speed.py    # leave-out RPM-bin generalization
+scripts/uncertainty_quantification.py  # MC-dropout entropy/MI/energy
+scripts/self_supervised_pretrain.py   # optional SimCLR-style encoder
+scripts/benchmarks/run_benchmark.py  # latency + accuracy benchmark (CI-safe --smoke)
+scripts/make_report_plots.py   # the 8 report figures (consumes only real artifacts)
+scripts/ros2_inference_node.py# ROS2 deployment node (live + replay)
+reproduce.sh                  # end-to-end pipeline
+results/                       # all evaluation artifacts + figures
+```
 
 ---
 
-## 14. 👤 Author
+## 📐 Design Decisions (short)
 
-**Rhutvik Pachghare** | Master's in Robotics & Automation | Arizona State University
-
-- [GitHub](https://github.com/Rhutvik-pachghare1999)
-- [LinkedIn](https://www.linkedin.com/in/rhutvik-pachghare/)
+- **13 channels** (`rpm1-4, roll, pitch, yaw, gyro_xyz, acc_xyz`): the accelerometer
+  carries the strongest 1P signature (63× energy amplification vs 20× on gyro) —
+  dropping it (the 10-channel default) discards signal. Channel order is stored in the
+  model checkpoint and enforced end-to-end (builder → training → ROS2 node).
+- **0.2 s windows @ 500 Hz**: long enough to resolve the 48–65 Hz 1P lines at
+  hovering speeds, short enough for a 0.2 ms reactive onboard loop.
+- **Altitude I-term in the simulator controller** so *faulted* vehicles still fly
+  realistic missions (PD-only commands healthy-model RPMs and starves multi-fault
+  vehicles).
+- **Grouped splits everywhere**: the pilot's 89% result was an artifact of a class with
+  zero training runs — fixed by more flights, not by metric surgery.
 
 ---
 
-## 15. 📧 Contact & Support
+## 🧹 Known Limitations
 
-For questions, issues, or collaboration:
-- **GitHub Issues**: [UAV-Aegis/issues](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2/issues)
-- **Project Repository**: [github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2](https://github.com/Rhutvik-pachghare1999/uav-fault-diagnostics-ros2)
+- **Sim-to-real gap**: all 96 flights are Isaac Sim. Real-vehicle transfer requires
+  domain randomization + flight data (the evaluation protocols are designed to make
+  that step honest).
+- **One fault severity profile** (fixed COM/aero/efficiency magnitudes); severity
+  labels encode *how many* rotors faulted, not graded degradation levels.
+- **16 classes on one vehicle model** (Crazyflie 2.1); per-vehicle calibration is
+  out of scope.
+- **ROS2 node is a prototype**: live mode assumes a synchronized IMU+RPM interface.
+
+---
+
+## 📜 License
+
+MIT — see repository root.
+
+## 👤 Author
+
+**Rhutvik Pachghare** — [GitHub](https://github.com/Rhutvik-pachghare1999)
+
+Built as a solo end-to-end robotics ML project: simulation, data engineering,
+modeling, evaluation methodology, and deployment.

@@ -1,0 +1,28 @@
+{
+  "sim": "isaac_sim_cf2x_usd",
+  "asset": "Bitcraze/Crazyflie/cf2x.usd",
+  "isaac_version": "5.1.0",
+  "physics_hz": 500.0,
+  "control_hz": 100.0,
+  "duration_s": 9.0,
+  "fault_type": "label_7",
+  "fault_mask": 7,
+  "fault_params": {
+    "unbalance": 0.8999999999999999,
+    "com_offset_m": 0.0006,
+    "aero_1p": 0.15,
+    "efficiency": 0.85,
+    "motor_gain": 0.75,
+    "faulted_rotors": [
+      1,
+      2,
+      3
+    ]
+  },
+  "payload_kg": 0.01,
+  "base_mass_kg": 0.028200000000000003,
+  "seed": 0,
+  "hover_rpm_mean": 3605.7835185139975,
+  "gyro_rms": 0.4581240348315396,
+  "gravity": 9.81
+}

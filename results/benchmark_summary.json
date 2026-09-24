@@ -1,0 +1,126 @@
+{
+  "timestamp": "2026-09-23T23:01:05.689786",
+  "n_samples": 32,
+  "mean_latency_ms": 0.526,
+  "p99_latency_ms": 0.794,
+  "overall_accuracy": 1.0,
+  "per_class": [
+    {
+      "class": "label_1",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_2",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_3",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_5",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_6",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_7",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_8",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_10",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_11",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_12",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_13",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_14",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    },
+    {
+      "class": "label_15",
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "mean_latency_ms": 0.526,
+      "p99_latency_ms": 0.794
+    }
+  ]
+}
