@@ -367,3 +367,45 @@
 2026-09-23 23:01:05,691  INFO      Mean latency     : 0.53 ms
 2026-09-23 23:01:05,691  INFO      P99  latency     : 0.79 ms
 2026-09-23 23:01:05,691  INFO      Benchmark complete.
+2026-09-23 23:23:54,996  INFO      ============================================================
+2026-09-23 23:23:54,997  INFO      UAV-Aegis Benchmark  |  2026-09-23T23:23:54
+2026-09-23 23:23:54,997  INFO      Mode: smoke  |  Samples: 32
+2026-09-23 23:23:54,997  INFO      ============================================================
+2026-09-23 23:23:55,009  WARNING   No dataset found, using synthetic data
+2026-09-23 23:23:55,021  INFO      Using synthetic data
+2026-09-23 23:23:55,029  INFO        Healthy       acc=0.2500  f1=0.2500  lat_mean=0.02 ms
+2026-09-23 23:23:55,030  INFO        Imbalanced    acc=0.0000  f1=0.0000  lat_mean=0.02 ms
+2026-09-23 23:23:55,030  INFO        Eroded        acc=0.0000  f1=0.0000  lat_mean=0.02 ms
+2026-09-23 23:23:55,031  INFO      Metrics saved → /home/rhutvik/uav-fault-diagnostics-ros2/results/benchmark_metrics.csv
+2026-09-23 23:23:55,653  INFO      Latency histogram saved → /home/rhutvik/uav-fault-diagnostics-ros2/results/latency_histogram.png
+2026-09-23 23:23:55,654  INFO      ------------------------------------------------------------
+2026-09-23 23:23:55,654  INFO      Overall accuracy : 0.0312
+2026-09-23 23:23:55,654  INFO      Mean latency     : 0.02 ms
+2026-09-23 23:23:55,654  INFO      P99  latency     : 0.06 ms
+2026-09-23 23:23:55,654  INFO      Benchmark complete.
+2026-09-23 23:23:58,373  INFO      ============================================================
+2026-09-23 23:23:58,375  INFO      UAV-Aegis Benchmark  |  2026-09-23T23:23:58
+2026-09-23 23:23:58,375  INFO      Mode: smoke  |  Samples: 32
+2026-09-23 23:23:58,376  INFO      ============================================================
+2026-09-23 23:24:10,349  INFO      Loaded real data from /home/rhutvik/uav-fault-diagnostics-ros2/ml_dataset_v2_aug.h5
+2026-09-23 23:24:10,349  INFO      Classes: ['healthy', 'label_1', 'label_2', 'label_3', 'label_4', 'label_5', 'label_6', 'label_7', 'label_8', 'label_9', 'label_10', 'label_11', 'label_12', 'label_13', 'label_14', 'label_15']
+2026-09-23 23:24:10,381  INFO        label_1       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,382  INFO        label_2       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,382  INFO        label_3       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,383  INFO        label_5       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,383  INFO        label_6       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,384  INFO        label_7       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,384  INFO        label_8       acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,385  INFO        label_10      acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,386  INFO        label_11      acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,386  INFO        label_12      acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,387  INFO        label_13      acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,387  INFO        label_14      acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,387  INFO        label_15      acc=1.0000  f1=1.0000  lat_mean=0.64 ms
+2026-09-23 23:24:10,388  INFO      Metrics saved → /home/rhutvik/uav-fault-diagnostics-ros2/results/benchmark_metrics.csv
+2026-09-23 23:24:11,051  INFO      Latency histogram saved → /home/rhutvik/uav-fault-diagnostics-ros2/results/latency_histogram.png
+2026-09-23 23:24:11,052  INFO      ------------------------------------------------------------
+2026-09-23 23:24:11,052  INFO      Overall accuracy : 1.0000
+2026-09-23 23:24:11,052  INFO      Mean latency     : 0.64 ms
+2026-09-23 23:24:11,052  INFO      P99  latency     : 1.55 ms
+2026-09-23 23:24:11,052  INFO      Benchmark complete.

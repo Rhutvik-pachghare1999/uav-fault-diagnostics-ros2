@@ -174,13 +174,16 @@ def run(smoke: bool = False):
     model, norm_stats = load_real_model()
     data_result = load_real_data(max_samples=n_samples)
     
-    if data_result is not None:
+    if data_result is not None and data_result[0] is not None:
         (X, y_true, classes), dataset_path = data_result
         log.info(f"Loaded real data from {dataset_path}")
         log.info(f"Classes: {classes}")
     else:
         X, y_true = synthetic_batch(n_samples)
         classes = ["Healthy", "Cracked", "Imbalanced", "Eroded"]
+        # Synthetic fallback: the real model expects 13-channel real data,
+        # so pair synthetic data with mock inference (CI smoke path).
+        model = None
         log.info("Using synthetic data")
 
     # ── Latency measurement ───────────────────────────────────────────────────
