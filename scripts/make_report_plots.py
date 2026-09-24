@@ -4,11 +4,11 @@ Generate publication-quality figures from REAL pipeline artifacts.
 
 Inputs (all optional; missing artifacts are skipped with a warning):
   - isaac_dataset/run_cf2x_*/        raw simulator runs (imu.csv/state.csv/meta.json)
-  - results/train_history.json       training curves (written by train_cnn.py)
-  - results/eval_final/predictions.npz  raw held-out predictions (eval_classifier.py)
-  - results/cross_speed_eval.json    per-RPM-bin accuracy (eval_cross_speed.py)
+  - results/train_history_sealed.json (+ _imu9)  training curves (train_cnn.py)
+  - results/eval_sealed/predictions.npz  sealed-test predictions (eval_classifier.py)
+  - results/cross_speed_loso.json    leave-one-RPM-bin-out, retrained (eval_cross_speed.py)
   - results/benchmark_metrics.csv    per-class latency (benchmarks/run_benchmark.py)
-  - results/uncertainty_eval.json    MC-dropout uncertainty (uncertainty_quantification.py)
+  - results/uncertainty_sealed.json  OOD/uncertainty (uncertainty_quantification.py)
 
 Outputs -> results/figures/*.png
 """
@@ -261,25 +261,35 @@ def fig_vibration_signature(run_root, out):
 
 # ---------------------------------------------------------------- figure 4
 def fig_training_curves(results, out):
-    path = os.path.join(results, "train_history.json")
+    path = os.path.join(results, "train_history_sealed.json")
     if not os.path.exists(path):
-        print("  [skip] train_history.json missing")
+        print("  [skip] train_history_sealed.json missing")
         return
     hist = json.load(open(path))
     ep = np.arange(1, len(hist["train_loss"]) + 1)
 
+    imu9_path = os.path.join(results, "train_history_imu9.json")
+    imu9 = json.load(open(imu9_path)) if os.path.exists(imu9_path) else None
+
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9, 3.4))
-    ax1.plot(ep, hist["train_loss"], color=C_BLUE, label="train")
-    ax1.plot(ep, hist["val_loss"], color=C_ORANGE, label="validation")
+    ax1.plot(ep, hist["train_loss"], color=C_BLUE, label="train (13-ch)")
+    ax1.plot(ep, hist["val_loss"], color=C_ORANGE, label="validation (13-ch)")
     ax1.set_xlabel("epoch"); ax1.set_ylabel("cross-entropy loss")
-    ax1.set_title("(a) Loss"); ax1.legend()
-    ax2.plot(ep, np.array(hist["val_acc"]) * 100, color=C_GREEN)
+    ax1.set_title("(a) Loss (sealed run-grouped split)"); ax1.legend(fontsize=8)
+    ax2.plot(ep, np.array(hist["val_acc"]) * 100, color=C_GREEN,
+             label="13-ch (RPM+IMU)")
+    if imu9:
+        ax2.plot(np.arange(1, len(imu9["val_acc"]) + 1),
+                 np.array(imu9["val_acc"]) * 100, "--", color=C_PURPLE,
+                 label="9-ch (IMU-only)")
     best = hist.get("best_val_acc", max(hist["val_acc"]))
     ax2.axhline(best * 100, ls="--", color=C_GRAY, lw=1,
-                label=f"best = {best*100:.2f} %")
+                label=f"best 13-ch = {best*100:.2f} %")
     ax2.set_xlabel("epoch"); ax2.set_ylabel("validation accuracy [%]")
-    ax2.set_ylim(0, 105); ax2.set_title("(b) Held-out accuracy"); ax2.legend()
-    fig.suptitle("CNN training on real Isaac Sim windows", y=1.02)
+    ax2.set_ylim(0, 105); ax2.set_title("(b) Held-out (val runs) accuracy")
+    ax2.legend(fontsize=7)
+    fig.suptitle("CNN training on the sealed split (train runs only + augs)",
+                 y=1.02)
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
@@ -288,9 +298,9 @@ def fig_training_curves(results, out):
 
 # ---------------------------------------------------------------- figure 5
 def fig_confusion(results, out):
-    path = os.path.join(results, "eval_final", "predictions.npz")
+    path = os.path.join(results, "eval_sealed", "predictions.npz")
     if not os.path.exists(path):
-        print("  [skip] eval_final/predictions.npz missing")
+        print("  [skip] eval_sealed/predictions.npz missing")
         return
     d = np.load(path, allow_pickle=True)
     trues, preds = d["trues"], d["preds"]
@@ -348,49 +358,54 @@ def fig_confusion(results, out):
 
 # ---------------------------------------------------------------- figure 6
 def fig_cross_speed(results, out):
-    path = os.path.join(results, "cross_speed_eval.json")
+    """LOSO (leave-one-RPM-bin-out, RETRAINED per fold) results.
+
+    The zero-shot version of this experiment is meaningless for deployment
+    claims; each bin is held out and the model retrained from scratch.
+    """
+    path = os.path.join(results, "cross_speed_loso.json")
     if not os.path.exists(path):
-        print("  [skip] cross_speed_eval.json missing")
+        print("  [skip] cross_speed_loso.json missing")
         return
     d = json.load(open(path))
-    bins = d["speed_bins"]; res = d["results"]
+    res = d["results"]
     keys = sorted(res.keys(), key=lambda k: int(k.split("_")[-1]))
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 3.6))
-    ctr = [(b[0] + b[1]) / 2 for b in bins]
-    acc = [res[k]["accuracy"] * 100 for k in keys]
-    n_s = [res[k]["test_samples"] for k in keys]
-    bars = ax1.bar(range(len(bins)), acc,
-                   color=[C_BLUE if a >= 90 else C_ORANGE for a in acc])
+    acc = [res[k]["window_accuracy"] * 100 for k in keys]
+    rng = [res[k]["rpm_range"] for k in keys]
+    n_s = [res[k]["n_test_windows"] for k in keys]
+    bars = ax1.bar(range(len(keys)), acc,
+                   color=[C_GREEN if a >= 90 else (C_BLUE if a >= 80 else C_ORANGE)
+                          for a in acc])
     for i, (a, n) in enumerate(zip(acc, n_s)):
         ax1.text(i, a + 0.8, f"{a:.1f}%\n(n={n})", ha="center", fontsize=7.5)
-    ax1.set_xticks(range(len(bins)))
-    ax1.set_xticklabels([f"{b[0]:.0f}–{b[1]:.0f} RPM" for b in bins], fontsize=8)
+    summ = d.get("summary", {})
+    ax1.axhline(summ.get("window_accuracy_mean", 0) * 100, ls="--", color=C_GRAY,
+               lw=1.2,
+               label=f"mean = {summ.get('window_accuracy_mean',0)*100:.1f}%")
+    ax1.set_xticks(range(len(keys)))
+    ax1.set_xticklabels([f"{lo:.0f}–{hi:.0f} RPM" for lo, hi in rng], fontsize=8)
     ax1.set_ylim(0, 112); ax1.set_ylabel("accuracy [%]")
-    ax1.set_title("(a) Accuracy per hover-RPM bin (payload operating points)")
+    ax1.set_title(f"(a) Held-out RPM bin accuracy ({d.get('mode', 'loso-retrain')}: "
+                  "model retrained per fold)")
+    ax1.legend(fontsize=8)
 
-    # per-class accuracy across bins
+    # per-run accuracy spread within each held-out bin — shows the failures,
+    # not just the average
     ax = ax2
-    cmap = plt.get_cmap("viridis")
-    for k_i, k in enumerate(keys):
-        pc = res[k].get("per_class", {})
-        xs, ys = [], []
-        for cls, m in pc.items():
-            if not isinstance(m, dict) or m.get("support", 0) <= 0:
-                continue
-            try:
-                xs.append(int(cls))
-            except ValueError:
-                continue  # 'macro avg' / 'weighted avg' summary rows
-            ys.append(m["recall"])
-        if xs:
-            order = np.argsort(xs)
-            ax.plot([xs[i] for i in order], [ys[i] for i in order],
-                    "-o", ms=3, lw=0.9, color=cmap(k_i / max(1, len(keys) - 1)),
-                    label=f"bin {k_i}")
-    ax.set_xlabel("fault class index"); ax.set_ylabel("recall")
-    ax.set_ylim(-0.03, 1.03); ax.set_title("(b) Class recall across RPM bins")
-    ax.legend(fontsize=7, ncol=2)
+    rng_seed = np.random.default_rng(0)
+    for i, k in enumerate(keys):
+        run_accs = np.array(list(res[k]["per_run_accuracy"].values())) * 100
+        xs = np.full(len(run_accs), i) + rng_seed.uniform(-0.18, 0.18, len(run_accs))
+        ax.scatter(xs, run_accs, s=10, color=C_BLUE, alpha=0.6, zorder=3)
+        ax.hlines(np.mean(run_accs), i - 0.3, i + 0.3, color=C_RED, lw=1.6,
+                  zorder=4)
+    ax.axhline(80, ls=":", color=C_GRAY, lw=1)
+    ax.set_xticks(range(len(keys)))
+    ax.set_xticklabels([f"{lo:.0f}–{hi:.0f} RPM" for lo, hi in rng], fontsize=8)
+    ax.set_ylabel("per-run accuracy [%]"); ax.set_ylim(-3, 105)
+    ax.set_title("(b) Per-run accuracy spread (red = bin mean)")
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)
@@ -443,40 +458,43 @@ def fig_benchmark(results, out):
 
 # ---------------------------------------------------------------- figure 8
 def fig_uncertainty(results, out):
-    path = os.path.join(results, "uncertainty_eval.json")
+    path = os.path.join(results, "uncertainty_sealed.json")
     if not os.path.exists(path):
-        print("  [skip] uncertainty_eval.json missing")
+        print("  [skip] uncertainty_sealed.json missing")
         return
     d = json.load(open(path))
     pc = d.get("per_class", {})
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 3.6))
-    def _key(k):
-        try:
-            return (0, int(k))
-        except ValueError:
-            return (1, k)
-    keys = sorted(pc.keys(), key=_key)
+
     def _name(k):
-        if k == "0" or "healthy" in k:
-            return "healthy"
-        try:
-            return f"label_{int(k)}" if k.isdigit() else k
-        except ValueError:
-            return k
-    names = [pc[k].get("class_name", _name(k)) for k in keys]
-    ent = [pc[k].get("mean_entropy", 0) for k in keys]
-    conf = [pc[k].get("mean_confidence", pc[k].get("mean_max_prob", 0)) for k in keys]
-    cols = [C_GREEN if "healthy" in n else C_BLUE for n in names]
+        return "healthy" if k in ("0", "healthy") else k
+    keys = sorted(pc.keys())
+    names = [_name(k) for k in keys]
+    ent = [pc[k].get("entropy", 0) for k in keys]
+    cols = [C_GREEN if n == "healthy" else C_BLUE for n in names]
     ax1.barh(names, ent, color=cols)
     ax1.set_xlabel("mean predictive entropy [nats]")
-    ax1.set_title(f"(a) Uncertainty by class (overall {d.get('mean_entropy',0):.3f})")
+    ax1.set_title(f"(a) Uncertainty by class (sealed test split, "
+                  f"acc {d.get('accuracy',0)*100:.1f}%)")
     ax1.tick_params(axis="y", labelsize=6.5)
-    ax2.barh(names, conf, color=cols)
-    ax2.set_xlabel("mean confidence")
-    ax2.set_xlim(0, 1.02)
-    ax2.set_title("(b) Confidence by class")
-    ax2.tick_params(axis="y", labelsize=6.5)
+
+    # OOD detection: AUROC of every score, oriented higher=OOD.
+    # Energy is the honest winner; confidence-based scores fail on
+    # gaussian-noise OOD — the figure shows the gap instead of hiding it.
+    aurocs = d.get("auroc_ood", {})
+    labels = list(aurocs.keys())
+    vals = [aurocs[k] for k in labels]
+    short = [l.split(" (")[0] for l in labels]
+    ax2.barh(short, vals,
+             color=[C_GREEN if v >= 0.9 else (C_BLUE if v >= 0.6 else C_ORANGE)
+                    for v in vals])
+    for i, v in enumerate(vals):
+        ax2.text(v + 0.01, i, f"{v:.3f}", va="center", fontsize=7.5)
+    ax2.axvline(0.5, ls=":", color=C_GRAY, lw=1, label="chance")
+    ax2.set_xlim(0, 1.08); ax2.set_xlabel("AUROC (OOD = gaussian noise)")
+    ax2.set_title("(b) OOD detection by score (higher = OOD)")
+    ax2.legend(fontsize=8, loc="lower right")
     fig.tight_layout()
     fig.savefig(out, bbox_inches="tight")
     plt.close(fig)

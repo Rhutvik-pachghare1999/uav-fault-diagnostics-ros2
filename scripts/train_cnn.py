@@ -1,10 +1,21 @@
 # scripts/train_cnn.py
 """
-Train the 2D-CNN multi-head classifier:
-  python3 scripts/train_cnn.py --h5 ml_dataset_v2.h5 --out models/cnn_multi.pth --epochs 50
+Train the 2D-CNN multi-head classifier.
+
+SEALED protocol (recommended):
+  python3 scripts/train_cnn.py --h5 ml_sealed.h5 --manifest splits/split_manifest.json \
+      --out models/cnn_sealed.pth --epochs 50 --history results/train_history_sealed.json
+
+  Train/val/test come from the FROZEN run-level manifest carried in the h5's
+  `split` column (0/1/2). The trainer trains on split==train (augmented copies
+  included), early-stops on split==val ORIGINAL windows only, and NEVER loads
+  split==test windows. The h5 split column is cross-checked against the
+  manifest (run_id -> run name -> manifest part) before training starts.
+
+Legacy mode (no --manifest): ephemeral in-process GroupShuffleSplit — metrics
+from this mode are NOT sealed and must not be reported as held-out results.
 """
-import argparse, h5py, numpy as np, os
-from sklearn.model_selection import train_test_split
+import argparse, h5py, numpy as np, os, json, ast
 
 try:
     from tqdm import tqdm
@@ -23,6 +34,7 @@ except ImportError:
 
 import torch, logging
 from torch.utils.data import Dataset
+from sklearn.model_selection import train_test_split
 
 def setup_logging(log_file="logs/train.log"):
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -53,13 +65,25 @@ class H5Dataset(Dataset):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--h5", "--data", required=True, help="Path to HDF5 dataset")
-    p.add_argument("--out", default="models/cnn_multi.pth", help="Output model path")
+    p.add_argument("--out", default="models/cnn_sealed.pth", help="Output model path")
     p.add_argument("--epochs", type=int, default=1000)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--base-filters", type=int, default=32)
+    p.add_argument("--manifest", default=None,
+                   help="frozen split manifest JSON; --h5 must carry split/is_aug "
+                        "columns (ml_sealed.h5). Sealed protocol v2.")
+    p.add_argument("--no-manifest-check", action="store_true",
+                   help="use the h5 split column as-is without cross-checking the "
+                        "manifest (for LOSO fold datasets with fold-specific splits)")
+    p.add_argument("--vars-subset", default=None,
+                   help="comma-separated channel subset to train on (e.g. IMU-only: "
+                        "'roll,pitch,yaw,gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z')")
+    p.add_argument("--history", default="results/train_history_sealed.json")
+    p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--tag", default="legacy", help="protocol tag recorded in the model meta")
     args = p.parse_args()
-    
+
     logger = setup_logging()
 
     try:
@@ -70,13 +94,17 @@ def main():
         print("Torch not installed in this environment. Install torch and retry.")
         raise
 
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
     with h5py.File(args.h5, "r") as f:
         X_all = f["X"][:]  # (N,1,C,W)
         run_id = f["run_id"][:] if "run_id" in f else None
         # use safe dataset read API
         y_fault = f["y_fault"][:]
+        split_col = f["split"][:] if "split" in f else None
+        is_aug = f["is_aug"][:] if "is_aug" in f else None
         # metadata may be bytes or str; parse safely (never eval untrusted data)
-        import json, ast
         meta_raw = f.attrs.get("meta", "{}")
         if isinstance(meta_raw, (bytes, bytearray)):
             meta_raw = meta_raw.decode("utf-8", errors="ignore")
@@ -88,31 +116,83 @@ def main():
             except Exception:
                 meta = {}
         n_faults = len(meta.get("fault_label_map", {})) or int(y_fault.max()+1)
-    # Split so that windows from the SAME physical run never cross the
-    # train/val/test boundary. Overlapping/adjacent windows within one run are
-    # near-duplicates; a plain random split would leak them across partitions and
-    # inflate accuracy. When run_id is available we use GroupShuffleSplit (grouped
-    # by run); otherwise we fall back to a stratified random split and warn.
-    idx = np.arange(len(X_all))
-    if run_id is not None and len(np.unique(run_id)) >= 3:
-        from sklearn.model_selection import GroupShuffleSplit
-        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-        tr_full, te_idx = next(gss.split(idx, y_fault, groups=run_id))
-        tr_idx = idx[tr_full]; te_idx = idx[te_idx]
-        gss2 = GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=42)
-        tr_rel, val_rel = next(gss2.split(tr_idx, y_fault[tr_idx], groups=run_id[tr_idx]))
-        tr_idx, val_idx = tr_idx[tr_rel], tr_idx[val_rel]
-        print(f"Run-grouped split: {len(tr_idx)} train / {len(val_idx)} val / {len(te_idx)} test "
-              f"windows over {len(np.unique(run_id))} runs (no run crosses partitions).")
+
+    # optional channel subset (e.g. IMU-only live-deployment model)
+    effective_vars = list(meta.get("vars", []))
+    if args.vars_subset:
+        if not effective_vars:
+            raise SystemExit("--vars-subset requires meta['vars'] in the h5")
+        want = [v.strip() for v in args.vars_subset.split(",") if v.strip()]
+        missing = [v for v in want if v not in effective_vars]
+        if missing:
+            raise SystemExit(f"--vars-subset unknown channels: {missing} (h5 has {effective_vars})")
+        ch = [effective_vars.index(v) for v in want]
+        X_all = np.ascontiguousarray(X_all[:, :, ch, :])
+        effective_vars = want
+        print(f"vars subset ({len(want)} ch): {want}")
+
+    manifest_sha = None
+    if args.manifest:
+        # ---- SEALED PROTOCOL v2: split comes from the FROZEN manifest ----
+        if split_col is None or is_aug is None:
+            raise SystemExit("--manifest requires an h5 with split/is_aug columns "
+                             "(build it with scripts/build_sealed_dataset.py)")
+        with open(args.manifest) as f:
+            manifest = json.load(f)
+        manifest_sha = manifest.get("sha256")
+        if not args.no_manifest_check:
+            # integrity guard: every ORIGINAL window's split must equal the
+            # manifest partition of its run — catches stale/mutated datasets
+            run_names = meta.get("run_names")
+            if run_id is None or not run_names:
+                raise SystemExit("manifest check requires run_id and meta['run_names']")
+            id_to_part = {}
+            for part, sid in (("train", 0), ("val", 1), ("test", 2)):
+                for n in manifest[part]:
+                    id_to_part[n] = sid
+            orig_mask = is_aug == 0
+            bad = []
+            for r in np.unique(run_id[orig_mask]):
+                name = run_names[int(r)]
+                if name not in id_to_part:
+                    raise SystemExit(f"run {name} missing from manifest")
+                if not np.all(split_col[orig_mask][run_id[orig_mask] == r] == id_to_part[name]):
+                    bad.append(name)
+            if bad:
+                raise SystemExit(f"LEAKAGE GUARD: h5 split disagrees with manifest for runs {bad}")
+        tr_idx = np.where(split_col == 0)[0]                       # originals + train-only augs
+        val_idx = np.where((split_col == 1) & (is_aug == 0))[0]   # val originals, never augmented
+        n_test_guard = int(((split_col == 2) & (is_aug == 0)).sum())
+        if len(val_idx) == 0 or n_test_guard == 0:
+            raise SystemExit("sealed h5 must contain non-empty val and test partitions")
+        print(f"SEALED split from {os.path.basename(args.manifest)} "
+              f"(sha256 {str(manifest_sha)[:12]}…): {len(tr_idx)} train / {len(val_idx)} val / "
+              f"{n_test_guard} test windows (test NEVER loaded for training or early stop)")
+        args.tag = "sealed-run-grouped-v2"
     else:
-        print("WARNING: run_id unavailable or <3 runs — falling back to stratified random "
-              "split. Windows from the same run may leak across partitions; treat metrics as optimistic.")
-        try:
-            tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=y_fault)
-            tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=y_fault[tr_idx])
-        except Exception:
-            tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=None)
-            tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=None)
+        # ---- LEGACY MODE: ephemeral split, NOT sealed ----
+        print("WARNING: no --manifest — using ephemeral in-process splits. Metrics from "
+              "this run are NOT sealed held-out results; do not report them as such.")
+        idx = np.arange(len(X_all))
+        if run_id is not None and len(np.unique(run_id)) >= 3:
+            from sklearn.model_selection import GroupShuffleSplit
+            gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+            tr_full, te_idx = next(gss.split(idx, y_fault, groups=run_id))
+            tr_idx = idx[tr_full]; te_idx = idx[te_idx]
+            gss2 = GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=42)
+            tr_rel, val_rel = next(gss2.split(tr_idx, y_fault[tr_idx], groups=run_id[tr_idx]))
+            tr_idx, val_idx = tr_idx[tr_rel], tr_idx[val_rel]
+            print(f"Run-grouped split: {len(tr_idx)} train / {len(val_idx)} val / {len(te_idx)} test "
+                  f"windows over {len(np.unique(run_id))} runs (no run crosses partitions).")
+        else:
+            print("WARNING: run_id unavailable or <3 runs — falling back to stratified random "
+                  "split. Windows from the same run may leak across partitions; treat metrics as optimistic.")
+            try:
+                tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=y_fault)
+                tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=y_fault[tr_idx])
+            except Exception:
+                tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=None)
+                tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=None)
 
     # compute per-channel mean/std on training set for normalization
     X_tr = X_all[tr_idx].astype('float32')
@@ -133,6 +213,29 @@ def main():
     opt = optim.Adam(model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', factor=0.5, patience=5)
+
+    model_meta = {
+        "n_faults": n_faults,
+        "mean": mean.tolist(),
+        "std": std.tolist(),
+        "fault_label_map": meta.get('fault_label_map', {}),
+        "vars": effective_vars,          # channels the model ACTUALLY consumes
+        "base_filters": args.base_filters,
+        "protocol": args.tag,
+        "manifest": os.path.basename(args.manifest) if args.manifest else None,
+        "manifest_sha256": manifest_sha,
+        "n_train_windows": int(len(tr_idx)),
+        "n_val_windows": int(len(val_idx)),
+        "seed": args.seed,
+        "h5": os.path.basename(args.h5),
+    }
+
+    def save_ckpt(path, epoch=None):
+        ckpt = {"state_dict": model.state_dict(), "meta": model_meta}
+        if epoch is not None:
+            ckpt["epoch"] = epoch
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        torch.save(ckpt, path)
 
     best_val = 0.0
     no_improve = 0
@@ -191,17 +294,7 @@ def main():
             no_improve = 0
             # Save best model to a separate path or fixed name
             best_model_path = args.out.replace(".pth", "_best.pth")
-            torch.save({
-                "epoch": epoch,
-                "state_dict": model.state_dict(), 
-                "meta": {
-                    "n_faults": n_faults, 
-                    "mean": mean.tolist(), 
-                    "std": std.tolist(), 
-                    "fault_label_map": meta.get('fault_label_map', {}),
-                    "vars": meta.get('vars', [])
-                }
-            }, best_model_path)
+            save_ckpt(best_model_path, epoch=epoch)
             print(f"  --> Saved new best model (acc={val_acc:.4f}) to {best_model_path}")
         else:
             no_improve += 1
@@ -211,26 +304,18 @@ def main():
             break
 
     # final save
-    torch.save({
-        "state_dict": model.state_dict(), 
-        "meta": {
-            "n_faults": n_faults, 
-            "mean": mean.tolist(), 
-            "std": std.tolist(), 
-            "fault_label_map": meta.get('fault_label_map', {}),
-            "vars": meta.get('vars', [])
-        }
-    }, args.out)
+    save_ckpt(args.out)
     print(f"Saved final model to {args.out}. Best validation accuracy: {best_val:.4f}")
 
     # dump training history for reproducible plots/reports
-    import json
     history["best_val_acc"] = best_val
     history["epochs_run"] = len(history["train_loss"])
-    os.makedirs("results", exist_ok=True)
-    with open("results/train_history.json", "w") as f:
+    history["protocol"] = args.tag
+    history["manifest_sha256"] = manifest_sha
+    os.makedirs(os.path.dirname(args.history) or ".", exist_ok=True)
+    with open(args.history, "w") as f:
         json.dump(history, f, indent=2)
-    print("Saved training history to results/train_history.json")
+    print(f"Saved training history to {args.history}")
 
 if __name__ == "__main__":
     main()

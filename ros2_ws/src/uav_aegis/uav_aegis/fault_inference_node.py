@@ -1,14 +1,11 @@
-"""UAV Fault Inference ROS2 Node - Package Entry Point"""
+"""UAV Fault Inference ROS2 Node - package entry point.
 
-import sys
-from pathlib import Path
+Uses the build-time vendored copy of scripts/ros2_inference_node.py
+(see setup.py vendor_scripts). No repo-relative sys.path hacks: the entry
+point works from the colcon INSTALL tree on any machine.
+"""
 
-# Add the project scripts to path
-project_root = Path(__file__).resolve().parents[3]
-scripts_dir = project_root / "scripts"
-sys.path.insert(0, str(scripts_dir))
-
-from ros2_inference_node import main
+from uav_aegis.vendor.ros2_inference_node import main
 
 if __name__ == "__main__":
     main()

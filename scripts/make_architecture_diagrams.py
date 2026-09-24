@@ -114,7 +114,7 @@ def fig_system_architecture(out):
           "or CSV flight-log replay", "publishes /fault_detection",
           "meta-driven 13-ch input"]),
     ]
-    chips = ["isaac_dataset/", "ml_dataset_v2_aug.h5", "models/cnn_multi.pth",
+    chips = ["isaac_dataset/", "ml_sealed.h5", "models/cnn_sealed.pth",
              "results/ · evals + figures", "/fault_detection topic"]
 
     for i, ((x, (title, lines)), (fill, edge)) in enumerate(zip(zip(xs, stages), STAGES)):

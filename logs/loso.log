@@ -1,0 +1,38 @@
+Loading originals from ml_sealed.h5 …
+105696 original windows over 96 runs, 16 classes
+  bin 0: 2914-3109 RPM, 24 runs, 26424 windows
+  bin 1: 3109-3299 RPM, 24 runs, 26424 windows
+  bin 2: 3299-3428 RPM, 24 runs, 26424 windows
+  bin 3: 3428-3702 RPM, 24 runs, 26424 windows
+
+=== bin 0: 2914-3109 RPM | 24 test runs, 26424 test windows ===
+  fold train: 201483 windows (67161 orig + augs), fold val: 12111 windows — bin 0 fully held out
+  retrained (best fold-val acc 0.9742) -> models/loso/bin0.pth
+/home/rhutvik/.local/lib/python3.12/site-packages/sklearn/metrics/_classification.py:2524: UserWarning: y_pred contains classes not in y_true
+  warnings.warn("y_pred contains classes not in y_true")
+  window_acc=0.9031 balanced_acc=0.9153 macro_f1=0.7985 per-run mean=0.9031
+
+=== bin 1: 3109-3299 RPM | 24 test runs, 26424 test windows ===
+  fold train: 201483 windows (67161 orig + augs), fold val: 12111 windows — bin 1 fully held out
+  retrained (best fold-val acc 0.9849) -> models/loso/bin1.pth
+/home/rhutvik/.local/lib/python3.12/site-packages/sklearn/metrics/_classification.py:2524: UserWarning: y_pred contains classes not in y_true
+  warnings.warn("y_pred contains classes not in y_true")
+  window_acc=0.9129 balanced_acc=0.9021 macro_f1=0.8292 per-run mean=0.9129
+
+=== bin 2: 3299-3428 RPM | 24 test runs, 26424 test windows ===
+  fold train: 201483 windows (67161 orig + augs), fold val: 12111 windows — bin 2 fully held out
+  retrained (best fold-val acc 0.9728) -> models/loso/bin2.pth
+  window_acc=0.9896 balanced_acc=0.9912 macro_f1=0.9908 per-run mean=0.9896
+
+=== bin 3: 3428-3702 RPM | 24 test runs, 26424 test windows ===
+  fold train: 201483 windows (67161 orig + augs), fold val: 12111 windows — bin 3 fully held out
+  retrained (best fold-val acc 0.9832) -> models/loso/bin3.pth
+/home/rhutvik/.local/lib/python3.12/site-packages/sklearn/metrics/_classification.py:2524: UserWarning: y_pred contains classes not in y_true
+  warnings.warn("y_pred contains classes not in y_true")
+  window_acc=0.9230 balanced_acc=0.9307 macro_f1=0.7985 per-run mean=0.9230
+
+============================================================
+LOSO-RETRAIN SUMMARY over 4 RPM bins:
+  window acc: mean=0.9322 std=0.0339 min=0.9031
+  balanced acc: mean=0.9348 min=0.9021
+Results saved to results/cross_speed_loso.json

@@ -64,19 +64,21 @@ def synthetic_batch(n_samples: int, seq_len: int = 100, n_channels: int = 10):
 
 
 def load_real_model():
-    """Load the trained CNN model."""
-    model_path = MODELS_DIR / "cnn_multi.pth"
+    """Load the sealed-protocol CNN model."""
+    model_path = MODELS_DIR / "cnn_sealed.pth"
     if not model_path.exists():
         log.warning(f"Model not found at {model_path}, using mock inference")
         return None, None
-    
+
     ck = torch.load(model_path, map_location="cpu")
     meta = ck.get("meta", {})
     n_faults = meta.get("n_faults", 16)
+    base_filters = int(meta.get("base_filters", 32))
     mean = meta.get("mean", None)
     std = meta.get("std", None)
-    
-    model = PaperCNN(in_channels=1, base_filters=32, num_classes=n_faults)
+
+    model = PaperCNN(in_channels=1, base_filters=base_filters,
+                     num_classes=n_faults)
     sd = ck.get("state_dict", ck)
     if all(k.startswith("module.") for k in sd.keys()):
         sd = {k[7:]: v for k, v in sd.items()}
@@ -92,25 +94,26 @@ def load_real_model():
 
 
 def load_real_data(max_samples=512):
-    """Load real test data from HDF5 dataset."""
-    # Try to find the dataset
+    """Load real TEST data from the sealed HDF5 dataset.
+
+    Accuracy claims must come from untouched test windows only: sealed h5
+    (split==2, originals only) is preferred; legacy mixed datasets would
+    silently include training/augmented windows and inflate accuracy.
+    """
     candidates = [
+        PROJECT_ROOT / "ml_sealed.h5",       # sealed: split/is_aug columns
+        PROJECT_ROOT / "ml_dataset_v2.h5",   # legacy fallback (accuracy caveat)
         PROJECT_ROOT / "ml_dataset_v2_aug.h5",
-        PROJECT_ROOT / "ml_dataset_v2.h5",
         ML_DATASET_PATH,
     ]
     dataset_path = next((p for p in candidates if p.exists()), None)
-    
+
     if dataset_path is None:
         log.warning("No dataset found, using synthetic data")
         return None, None
-    
+
     import h5py
     with h5py.File(dataset_path, "r") as f:
-        X = f["X"][:]
-        y = f["y_fault"][:]
-        
-        # Get class names from metadata
         import json, ast
         meta_raw = f.attrs.get("meta", "{}")
         if isinstance(meta_raw, (bytes, bytearray)):
@@ -125,7 +128,19 @@ def load_real_data(max_samples=512):
         fault_map = meta.get("fault_label_map", {})
         rev_map = {v: k for k, v in fault_map.items()}
         classes = [rev_map.get(i, f"class_{i}") for i in range(len(fault_map))]
-    
+
+        X = f["X"][:]
+        y = f["y_fault"][:]
+        if "split" in f and "is_aug" in f:
+            sel = (f["split"][:] == 2) & (f["is_aug"][:] == 0)  # test originals
+            X, y = X[sel], y[sel]
+            log.info(f"sealed dataset: {len(X)} untouched TEST windows")
+        else:
+            log.warning(
+                "legacy dataset without split columns: accuracy here is "
+                "NOT held-out (may include training windows); latency is "
+                "still valid")
+
     # Subsample
     N = len(X)
     if N > max_samples:
@@ -133,7 +148,7 @@ def load_real_data(max_samples=512):
         idxs = rng.choice(N, max_samples, replace=False)
         X = X[idxs]
         y = y[idxs]
-    
+
     return (X, y, classes), dataset_path
 
 
@@ -148,10 +163,18 @@ def real_infer(model, X_batch, mean=None, std=None):
     """Run inference with real model."""
     X = X_batch.astype("float32")
     if mean is not None and std is not None:
-        try:
-            X = (X - mean) / (std + 1e-9)
-        except Exception:
-            pass
+        C = X.shape[2] if X.ndim == 4 else X.shape[1]
+        for name, arr in (("mean", mean), ("std", std)):
+            if arr.size == C:  # reshape per-channel stats to broadcast safely
+                if X.ndim == 4:
+                    arr = arr.reshape(1, 1, C, 1)
+                else:
+                    arr = arr.reshape(1, C, 1)
+                if name == "mean":
+                    mean = arr
+                else:
+                    std = arr
+        X = (X - mean) / (std + 1e-9)
     inp = torch.from_numpy(X)
     if inp.dim() == 5 and inp.size(2) == 1:
         inp = inp.squeeze(2)

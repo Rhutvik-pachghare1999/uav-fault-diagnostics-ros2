@@ -1,59 +1,61 @@
-"""Launch file for UAV Aegis fault inference."""
+"""Launch file for UAV Aegis fault inference.
+
+The node is argparse-driven (it also runs outside ROS2 for CSV replay), so we
+launch the installed console script directly with command-line arguments
+instead of ROS parameters, which the node would silently ignore.
+"""
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.substitutions import FindExecutable, LaunchConfiguration
 
 
 def generate_launch_description():
     model_arg = DeclareLaunchArgument(
         'model_path',
         default_value='',
-        description='Path to trained model (.pth)'
-    )
-    
+        description='Path to trained model (.pth), REQUIRED')
+
     mode_arg = DeclareLaunchArgument(
         'mode',
         default_value='live',
-        description='Operating mode: live or replay'
-    )
-    
+        description='Operating mode: live or replay')
+
     input_arg = DeclareLaunchArgument(
         'input_file',
         default_value='',
-        description='Input CSV file for replay mode'
-    )
-    
+        description='Input CSV file for replay mode')
+
     topic_arg = DeclareLaunchArgument(
         'imu_topic',
         default_value='/imu/data',
-        help='IMU topic to subscribe to'
-    )
-    
+        description='IMU topic to subscribe to')
+
+    rpm_topic_arg = DeclareLaunchArgument(
+        'rpm_topic',
+        default_value='/rotor_rpms',
+        description='rotor RPM telemetry topic (Float32MultiArray, 4 values); '
+                     'required when the model consumes rpm channels')
+
     output_arg = DeclareLaunchArgument(
         'output_topic',
         default_value='/fault_detection',
-        help='Output topic for fault detection'
-    )
-    
+        description='Output topic for fault detection')
+
     return LaunchDescription([
         model_arg,
         mode_arg,
         input_arg,
         topic_arg,
+        rpm_topic_arg,
         output_arg,
-        Node(
-            package='uav_aegis',
-            executable='fault_inference_node',
-            name='fault_inference_node',
-            output='screen',
-            parameters=[{
-                'model_path': LaunchConfiguration('model_path'),
-                'mode': LaunchConfiguration('mode'),
-                'input_file': LaunchConfiguration('input_file'),
-                'imu_topic': LaunchConfiguration('imu_topic'),
-                'output_topic': LaunchConfiguration('output_topic'),
-            }],
-        ),
+        ExecuteProcess(
+            cmd=[FindExecutable(name='fault_inference_node'),
+                 '--model', LaunchConfiguration('model_path'),
+                 '--mode', LaunchConfiguration('mode'),
+                 '--input', LaunchConfiguration('input_file'),
+                 '--topic', LaunchConfiguration('imu_topic'),
+                 '--rpm-topic', LaunchConfiguration('rpm_topic'),
+                 '--publish_topic', LaunchConfiguration('output_topic')],
+            output='screen'),
     ])

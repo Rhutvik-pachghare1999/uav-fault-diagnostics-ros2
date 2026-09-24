@@ -8,7 +8,7 @@ ISAAC_DATASET_DIR = PROJECT_ROOT / "isaac_dataset"
 ML_DATASET_PATH = PROJECT_ROOT / "ml_dataset_v2.h5"
 MODELS_DIR = PROJECT_ROOT / "models"
 PROP_LSTM_PATH = MODELS_DIR / "prop_lstm.pth"
-CNN_MODEL_PATH = MODELS_DIR / "cnn_multi.pth"
+CNN_MODEL_PATH = MODELS_DIR / "cnn_sealed.pth"
 USD_PATH = Path(os.getenv("QUAD_USD_PATH", PROJECT_ROOT / "quad.usd"))
 
 # window / variables (paper values)

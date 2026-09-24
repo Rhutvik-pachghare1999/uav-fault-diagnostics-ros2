@@ -1,14 +1,10 @@
-"""PX4 Log Replay - Package Entry Point"""
+"""PX4 Log Replay - package entry point.
 
-import sys
-from pathlib import Path
+Uses the build-time vendored copy of scripts/px4_log_replay.py
+(see setup.py vendor_scripts). Works from the colcon INSTALL tree.
+"""
 
-# Add the project scripts to path
-project_root = Path(__file__).resolve().parents[3]
-scripts_dir = project_root / "scripts"
-sys.path.insert(0, str(scripts_dir))
-
-from px4_log_replay import main
+from uav_aegis.vendor.px4_log_replay import main
 
 if __name__ == "__main__":
     main()

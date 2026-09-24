@@ -11,3 +11,8 @@ isaac_dataset_legacy/
 ros2_ws/build/
 ros2_ws/install/
 ros2_ws/log/
+#  - Vendored node scripts (copied from scripts/ by setup.py at build time)
+ros2_ws/src/uav_aegis/uav_aegis/vendor/
+#  - Verbose per-epoch training progress logs (tqdm spam, 12+ MB)
+logs/train_sealed.log
+logs/train_imu9.log

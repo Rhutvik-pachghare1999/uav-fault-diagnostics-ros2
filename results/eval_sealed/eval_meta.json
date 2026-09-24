@@ -1,0 +1,16 @@
+{
+  "protocol": "sealed-run-grouped-v2",
+  "split_evaluated": "test",
+  "originals_only": true,
+  "model": "models/cnn_sealed.pth",
+  "model_manifest_sha256": "9e4c2534405556c1c3c83c37d5c985621caa7cac088ffa9e0a62e90b8e4baa37",
+  "h5_manifest_sha256": "9e4c2534405556c1c3c83c37d5c985621caa7cac088ffa9e0a62e90b8e4baa37",
+  "n_windows": 35232,
+  "n_windows_full_split": 35232,
+  "window_accuracy": 0.8165020435967303,
+  "balanced_accuracy": 0.8165020435967303,
+  "per_run_accuracy_mean": 0.8165020435967303,
+  "per_run_accuracy_std": 0.24802776546833394,
+  "per_run_accuracy_min": 0.0,
+  "seed": 42
+}

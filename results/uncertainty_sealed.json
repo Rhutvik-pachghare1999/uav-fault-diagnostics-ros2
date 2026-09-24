@@ -1,0 +1,134 @@
+{
+  "protocol": "sealed-test-originals",
+  "split": "test",
+  "model": "models/cnn_sealed.pth",
+  "dataset": "ml_sealed.h5",
+  "n_eval_windows": 35232,
+  "n_ood": 2000,
+  "ood_kind": "synthetic gaussian noise",
+  "accuracy": 0.80575,
+  "mean_max_prob": 0.9873727560043335,
+  "mean_entropy": 0.03044101595878601,
+  "mean_mutual_info": -2.0384487431357456e-09,
+  "mean_energy": -27.256206512451172,
+  "auroc_ood": {
+    "Energy (higher=OOD)": 0.9960549999999999,
+    "Entropy (higher=OOD)": 0.600544875,
+    "Mutual Info (higher=OOD)": 0.5058246875000001,
+    "Neg Max Prob (lower conf=OOD)": 0.40377512500000007
+  },
+  "per_class": {
+    "healthy": {
+      "accuracy": 1.0,
+      "entropy": 6.30514315570896e-29,
+      "mutual_info": -1.0734061927929313e-36,
+      "energy": -58.62459945678711,
+      "support": 229
+    },
+    "label_1": {
+      "accuracy": 0.84765625,
+      "entropy": 0.003328491933643818,
+      "mutual_info": -5.891855892059539e-10,
+      "energy": -22.733173370361328,
+      "support": 256
+    },
+    "label_2": {
+      "accuracy": 0.5642857142857143,
+      "entropy": 0.09327124059200287,
+      "mutual_info": -5.85773163308545e-09,
+      "energy": -6.242801666259766,
+      "support": 280
+    },
+    "label_3": {
+      "accuracy": 0.8683127572016461,
+      "entropy": 0.029903391376137733,
+      "mutual_info": -1.4258850766779574e-09,
+      "energy": -30.882892608642578,
+      "support": 243
+    },
+    "label_4": {
+      "accuracy": 0.8625,
+      "entropy": 0.06241018697619438,
+      "mutual_info": -4.496290006983372e-09,
+      "energy": -38.24613571166992,
+      "support": 240
+    },
+    "label_5": {
+      "accuracy": 0.8333333333333334,
+      "entropy": 0.015996785834431648,
+      "mutual_info": -4.335204639716039e-09,
+      "energy": -21.363948822021484,
+      "support": 246
+    },
+    "label_6": {
+      "accuracy": 0.9505703422053232,
+      "entropy": 0.023971084505319595,
+      "mutual_info": -3.0712214993400266e-09,
+      "energy": -21.77513885498047,
+      "support": 263
+    },
+    "label_7": {
+      "accuracy": 0.8294573643410853,
+      "entropy": 0.05214027687907219,
+      "mutual_info": -4.937836250995531e-10,
+      "energy": -20.224939346313477,
+      "support": 258
+    },
+    "label_8": {
+      "accuracy": 0.9004149377593361,
+      "entropy": 0.002157576149329543,
+      "mutual_info": -1.3253295128023979e-09,
+      "energy": -30.54758071899414,
+      "support": 241
+    },
+    "label_9": {
+      "accuracy": 1.0,
+      "entropy": 4.050644208724016e-25,
+      "mutual_info": -2.856043669832011e-32,
+      "energy": -45.247352600097656,
+      "support": 236
+    },
+    "label_10": {
+      "accuracy": 1.0,
+      "entropy": 0.005402107257395983,
+      "mutual_info": -2.763021744994071e-13,
+      "energy": -25.995664596557617,
+      "support": 237
+    },
+    "label_11": {
+      "accuracy": 0.7142857142857143,
+      "entropy": 0.05528165400028229,
+      "mutual_info": -5.388843885012484e-11,
+      "energy": -22.2420597076416,
+      "support": 259
+    },
+    "label_12": {
+      "accuracy": 0.14225941422594143,
+      "entropy": 0.06098049879074097,
+      "mutual_info": -2.506683083325356e-09,
+      "energy": -13.251940727233887,
+      "support": 239
+    },
+    "label_13": {
+      "accuracy": 0.9718875502008032,
+      "entropy": 0.006146614905446768,
+      "mutual_info": -3.605469700573849e-09,
+      "energy": -43.88441467285156,
+      "support": 249
+    },
+    "label_14": {
+      "accuracy": 0.7255639097744361,
+      "entropy": 0.017855186015367508,
+      "mutual_info": 2.23562127144028e-10,
+      "energy": -37.741085052490234,
+      "support": 266
+    },
+    "label_15": {
+      "accuracy": 0.7286821705426356,
+      "entropy": 0.04607248306274414,
+      "mutual_info": -4.514698392910077e-09,
+      "energy": -4.0794677734375,
+      "support": 258
+    }
+  }
+}
