@@ -1,6 +1,6 @@
 # scripts/train_cnn.py
 """
-Train the 2D-CNN multi-head classifier.
+Train the 2D-CNN fault classifier (16 classes, single head).
 
 SEALED protocol (recommended):
   python3 scripts/train_cnn.py --h5 ml_sealed.h5 --manifest splits/split_manifest.json \

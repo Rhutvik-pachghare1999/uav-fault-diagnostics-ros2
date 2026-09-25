@@ -2,8 +2,8 @@
 """Fine-tune a pretrained CNN on a given HDF5 dataset with class balancing.
 
 Usage:
-  python3 scripts/finetune_cnn.py --h5 scripts/data_out/ml_dataset_small_real.h5 \
-       --pretrained scripts/models/cnn_multi_retrain.pth --out scripts/models/cnn_multi_finetune.pth \
+  python3 scripts/finetune_cnn.py --h5 ml_sealed.h5 \
+       --pretrained models/cnn_sealed.pth --out models/cnn_finetuned.pth \
        --epochs 40 --batch-size 64 --lr 1e-4
 """
 
