@@ -2,9 +2,9 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>uav_aegis</name>
-  <version>0.1.0</version>
+  <version>0.3.0</version>
   <description>UAV Fault Diagnostics with Deep Learning</description>
-  <maintainer email="rhutvik@example.com">Rhutvik Pachghare</maintainer>
+  <maintainer email="Rhutvik-pachghare1999@users.noreply.github.com">Rhutvik Pachghare</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

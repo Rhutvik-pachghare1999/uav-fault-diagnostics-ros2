@@ -1,4 +1,3 @@
-
 import argparse
 import json
 import os
@@ -6,6 +5,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
 
 def load_json_if_exists(path):
     if path.exists():
@@ -16,6 +16,7 @@ def load_json_if_exists(path):
             sys.exit(2)
     return {}
 
+
 def is_isaac_script(path):
     """Detect if script imports omni/pxr/omni.isaac by reading first ~200 lines."""
     try:
@@ -24,6 +25,7 @@ def is_isaac_script(path):
         return False
     checks = ["import omni", "from pxr import", "omni.isaac", "from omni import", "import pxr"]
     return any(s in txt for s in checks)
+
 
 def run_script(python_exec, script_path, args, log_path, timeout=None):
     cmd = [python_exec, str(script_path)] + args
@@ -60,6 +62,7 @@ def run_script(python_exec, script_path, args, log_path, timeout=None):
     print(f"<<< Finished {script_path.name} (rc={proc.returncode}) in {elapsed:.1f}s")
     return proc.returncode
 
+
 def verify_expected_outputs(script_name, expected_list):
     """expected_list: list of file/dir paths (absolute or relative). Return True if all exist and non-empty for dirs."""
     missing = []
@@ -75,18 +78,31 @@ def verify_expected_outputs(script_name, expected_list):
             missing.append(p + " (empty dir)")
     return missing
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scripts-dir", required=True, help="Directory containing .py scripts to run")
-    ap.add_argument("--isaac-python", default="/home/rhutvik/isaac-sim/python.sh",
-                    help="Path to Isaac Sim python launcher (python.sh). Used automatically for scripts that import omni/pxr.")
+    ap.add_argument(
+        "--isaac-python",
+        default=os.environ.get("ISAAC_PYTHON", ""),
+        help="Path to Isaac Sim python launcher (python.sh), used for scripts that import omni/pxr. "
+        "Can also be set via the ISAAC_PYTHON env var.",
+    )
     ap.add_argument("--dataset-dir", default="", help="Optional: dataset directory to verify (special-case check)")
-    ap.add_argument("--run-args-json", default="run_args.json",
-                    help="JSON file (in scripts-dir or cwd) mapping script filename -> list of args")
-    ap.add_argument("--expected-json", default="expected_outputs.json",
-                    help="JSON file mapping script filename -> list of output paths that must exist after running")
+    ap.add_argument(
+        "--run-args-json",
+        default="run_args.json",
+        help="JSON file (in scripts-dir or cwd) mapping script filename -> list of args",
+    )
+    ap.add_argument(
+        "--expected-json",
+        default="expected_outputs.json",
+        help="JSON file mapping script filename -> list of output paths that must exist after running",
+    )
     ap.add_argument("--timeout", type=float, default=0.0, help="Per-script timeout in seconds (0 for no timeout)")
-    ap.add_argument("--order-file", default="", help="Optional file listing filenames (one per line) to force run order")
+    ap.add_argument(
+        "--order-file", default="", help="Optional file listing filenames (one per line) to force run order"
+    )
     ap.add_argument("--logs-dir", default="logs", help="Directory to write logs into (inside scripts-dir by default)")
     args = ap.parse_args()
 
@@ -123,7 +139,7 @@ def main():
         if not order_f.is_absolute():
             order_f = scripts_dir / order_f
         if order_f.exists():
-            listed = [l.strip() for l in order_f.read_text().splitlines() if l.strip()]
+            listed = [ln.strip() for ln in order_f.read_text().splitlines() if ln.strip()]
             ordered = []
             for name in listed:
                 candidate = scripts_dir / name
@@ -193,6 +209,7 @@ def main():
         print(f"SUCCESS: {script.name} completed and outputs (if any) verified. Proceeding to next.")
 
     print("\nALL SCRIPTS COMPLETED SUCCESSFULLY.")
+
 
 if __name__ == "__main__":
     main()

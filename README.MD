@@ -11,10 +11,12 @@
 
 Propeller fault diagnostics for a Bitcraze Crazyflie 2.1 X-quadrotor.
 The pipeline generates faulted flights in NVIDIA Isaac Sim, converts the
-telemetry into 13-channel windows, trains a small 1D-CNN to classify the fault,
+telemetry into 13-channel windows, trains a compact 2D-CNN (convolutions over
+the window matrix, 112K parameters) to classify the fault,
 evaluates it on held-out flights, and serves the model through a ROS 2 node.
 
-All 96 training flights come from physics simulation at 500 Hz. Faults are
+All 96 flights come from physics simulation at 500 Hz (48 train, 16 validation,
+32 test, split by flight). Faults are
 injected as physical parameter changes (mass imbalance, aerodynamic asymmetry,
 efficiency and motor-gain loss), and the resulting vibration signatures are
 checked against rotor dynamics before any model is trained.
@@ -155,15 +157,19 @@ refuses checkpoints without this metadata.
 
 - The `healthy` class is never misclassified in either direction (F1 1.00). For a deployment
   story built on detection before classification, this is the class that matters most.
-- High-severity, multi-rotor faults (larger vibration signatures) classify near-perfectly.
+- High-severity or multi-rotor faults do not classify uniformly: the strongest fault classes
+  (`label_9` F1 0.99, `label_6` 0.94) and the weakest (`label_12` 0.24, `label_14` 0.61) are
+  both multi-rotor faults, so severity and rotor count do not predict separability.
 - Cross-operating-point generalization is real: with three RPM bins in training, a model
   retrained from scratch reads a never-seen fourth bin at 90–99% (Figure 9).
 
 ### Failure cases
 
 - `label_12` (mask0c, rotors R3+R4) recall is 0.13. Precision is 1.00, so the model is right
-  when it predicts this class but rarely predicts it; true `label_12` windows are mostly called
-  other two-rotor faults. This is the largest single accuracy sink.
+  when it predicts this class but rarely predicts it; true `label_12` windows are confused
+  mostly with `label_14` (rotors R2+R3+R4, 1138 windows) and `label_4` (single R4, 575
+  windows) — faults that overlap `label_12` on rotor R4. This is the largest single
+  accuracy sink.
 - Failures concentrate at the lowest hover-RPM operating point (0 g payload, roughly
   2900–3100 RPM), where 1P excitation is weakest. The four test runs below 50% accuracy
   (`mask0c_p05_s1` 0%, `mask0c_p00_s1` 27%, `mask02_p00_s0` 29%, `mask0e_p00_s0` 45%) are all
@@ -270,7 +276,7 @@ zero-filled channels:
 
 ```bash
 # Live inference, model with RPM channels (ROS 2 Jazzy, after colcon build + source):
-ros2 launch uav_aegis fault_inference.launch.py model:=models/cnn_sealed.pth rpm_topic:=/rotor_rpms
+ros2 launch uav_aegis fault_inference.launch.py model_path:=models/cnn_sealed.pth rpm_topic:=/rotor_rpms
 #   ...or directly:
 python3 scripts/ros2_inference_node.py --model models/cnn_sealed.pth --mode live --rpm-topic /rotor_rpms
 

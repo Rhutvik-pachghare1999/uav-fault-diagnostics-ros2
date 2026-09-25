@@ -77,19 +77,18 @@ def load_real_model():
     mean = meta.get("mean", None)
     std = meta.get("std", None)
 
-    model = PaperCNN(in_channels=1, base_filters=base_filters,
-                     num_classes=n_faults)
+    model = PaperCNN(in_channels=1, base_filters=base_filters, num_classes=n_faults)
     sd = ck.get("state_dict", ck)
     if all(k.startswith("module.") for k in sd.keys()):
         sd = {k[7:]: v for k, v in sd.items()}
     model.load_state_dict(sd)
     model.eval()
-    
+
     if mean is not None:
         mean = np.array(mean, dtype="float32")
     if std is not None:
         std = np.array(std, dtype="float32")
-    
+
     return model, (mean, std)
 
 
@@ -101,8 +100,8 @@ def load_real_data(max_samples=512):
     silently include training/augmented windows and inflate accuracy.
     """
     candidates = [
-        PROJECT_ROOT / "ml_sealed.h5",       # sealed: split/is_aug columns
-        PROJECT_ROOT / "ml_dataset_v2.h5",   # legacy fallback (accuracy caveat)
+        PROJECT_ROOT / "ml_sealed.h5",  # sealed: split/is_aug columns
+        PROJECT_ROOT / "ml_dataset_v2.h5",  # legacy fallback (accuracy caveat)
         PROJECT_ROOT / "ml_dataset_v2_aug.h5",
         ML_DATASET_PATH,
     ]
@@ -113,8 +112,11 @@ def load_real_data(max_samples=512):
         return None, None
 
     import h5py
+
     with h5py.File(dataset_path, "r") as f:
-        import json, ast
+        import json
+        import ast
+
         meta_raw = f.attrs.get("meta", "{}")
         if isinstance(meta_raw, (bytes, bytearray)):
             meta_raw = meta_raw.decode("utf-8", errors="ignore")
@@ -139,7 +141,8 @@ def load_real_data(max_samples=512):
             log.warning(
                 "legacy dataset without split columns: accuracy here is "
                 "NOT held-out (may include training windows); latency is "
-                "still valid")
+                "still valid"
+            )
 
     # Subsample
     N = len(X)
@@ -196,7 +199,7 @@ def run(smoke: bool = False):
     # Try to load real model and data
     model, norm_stats = load_real_model()
     data_result = load_real_data(max_samples=n_samples)
-    
+
     if data_result is not None and data_result[0] is not None:
         (X, y_true, classes), dataset_path = data_result
         log.info(f"Loaded real data from {dataset_path}")
@@ -213,21 +216,21 @@ def run(smoke: bool = False):
     latencies_ms = []
     preds = []
     batch_size = 8
-    
+
     for i in range(0, len(X), batch_size):
         batch = X[i : i + batch_size]
         t0 = time.perf_counter()
-        
+
         if model is not None:
             p = real_infer(model, batch, *norm_stats)
         else:
             p = mock_infer(batch, len(classes))
-        
+
         t1 = time.perf_counter()
         latencies_ms.append((t1 - t0) * 1e3 / len(batch))
         preds.extend(p.tolist())
 
-    y_pred = np.array(preds[:len(X)])
+    y_pred = np.array(preds[: len(X)])
     latencies_ms = np.array(latencies_ms)
 
     # ── Per-class metrics ─────────────────────────────────────────────────────
@@ -264,8 +267,7 @@ def run(smoke: bool = False):
 
     # ── Save CSV metrics ──────────────────────────────────────────────────────
     csv_path = RESULTS_DIR / "benchmark_metrics.csv"
-    fieldnames = ["class", "accuracy", "precision", "recall", "f1",
-                  "mean_latency_ms", "p99_latency_ms"]
+    fieldnames = ["class", "accuracy", "precision", "recall", "f1", "mean_latency_ms", "p99_latency_ms"]
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -275,6 +277,7 @@ def run(smoke: bool = False):
     # ── Save latency histogram ────────────────────────────────────────────────
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -312,7 +315,6 @@ def run(smoke: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="UAV-Aegis benchmark")
-    parser.add_argument("--smoke", action="store_true",
-                        help="Quick smoke-test (32 samples, no model weights)")
+    parser.add_argument("--smoke", action="store_true", help="Quick smoke-test (32 samples, no model weights)")
     args = parser.parse_args()
     run(smoke=args.smoke)

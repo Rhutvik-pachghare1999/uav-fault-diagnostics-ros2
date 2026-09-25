@@ -7,16 +7,24 @@ per-run waypoint-driven RPM envelopes and payload scaling to make datasets more 
 Usage:
   python3 scripts/generate_realistic_runs.py --base isaac_dataset/run_auto_1764651130 --out-count 50
 """
-import argparse, os, json, shutil
-import numpy as np, pandas as pd
 
-def generate_run(base_run, out_run, label_mask, payload_kg=1.5, cg_bias=(0.0,0.0)):
+import argparse
+import os
+import json
+import shutil
+import numpy as np
+import pandas as pd
+
+
+def generate_run(base_run, out_run, label_mask, payload_kg=1.5, cg_bias=(0.0, 0.0)):
     os.makedirs(out_run, exist_ok=True)
     # read base imu
     src = None
-    for nm in ('imu.csv','imu_full.csv'):
+    for nm in ("imu.csv", "imu_full.csv"):
         p = os.path.join(base_run, nm)
-        if os.path.exists(p): src = p; break
+        if os.path.exists(p):
+            src = p
+            break
     if src is None:
         # Base imu not found for this base run. Log and signal failure to caller.
         print(f"Warning: base imu not found in base run: {base_run}")
@@ -24,14 +32,14 @@ def generate_run(base_run, out_run, label_mask, payload_kg=1.5, cg_bias=(0.0,0.0
     df = pd.read_csv(src)
     T = len(df)
     # create waypoint-driven RPM envelope: low-frequency sinusoid per motor
-    t = np.linspace(0, 2*np.pi, T)
-    base_rpms = np.zeros((4,T))
+    t = np.linspace(0, 2 * np.pi, T)
+    base_rpms = np.zeros((4, T))
     for i in range(4):
         freq = np.random.uniform(0.5, 1.5)
-        phase = np.random.uniform(0, 2*np.pi)
+        phase = np.random.uniform(0, 2 * np.pi)
         amp = np.random.uniform(0.02, 0.08)  # relative variation
         # use median rpm of that column as baseline if present
-        col = f'rpm{i+1}'
+        col = f"rpm{i + 1}"
         if col in df.columns:
             baseline = np.nanmedian(df[col])
         else:
@@ -51,43 +59,51 @@ def generate_run(base_run, out_run, label_mask, payload_kg=1.5, cg_bias=(0.0,0.0
     # construct new dataframe: copy original and replace rpm columns if present
     new_df = df.copy()
     for i in range(4):
-        col = f'rpm{i+1}'
+        col = f"rpm{i + 1}"
         if col in new_df.columns:
             new_df[col] = base_rpms[i]
         else:
             new_df[col] = base_rpms[i]
 
     # add small attitude drift from CG bias
-    for j,angle in enumerate(['roll','pitch']):
+    for j, angle in enumerate(["roll", "pitch"]):
         if angle in new_df.columns:
-            new_df[angle] = new_df[angle] + (cg_bias[j] * (1 + 0.005 * np.sin(0.2*t)))
+            new_df[angle] = new_df[angle] + (cg_bias[j] * (1 + 0.005 * np.sin(0.2 * t)))
 
-    new_df.to_csv(os.path.join(out_run, 'imu.csv'), index=False)
+    new_df.to_csv(os.path.join(out_run, "imu.csv"), index=False)
     # copy state.csv etc if exist
-    for nm in ('state.csv','thrust_tau.csv'):
+    for nm in ("state.csv", "thrust_tau.csv"):
         s = os.path.join(base_run, nm)
-        if os.path.exists(s): shutil.copy(s, os.path.join(out_run, nm))
+        if os.path.exists(s):
+            shutil.copy(s, os.path.join(out_run, nm))
 
     # meta.json
-    fault_label = f'label_{label_mask}'
-    meta = {'fault_type': fault_label, 'fault_params': {'unbalance': float(np.random.uniform(0.01, 0.6))}, 'payload': payload_kg, 'cg_bias': list(cg_bias)}
-    with open(os.path.join(out_run, 'meta.json'),'w') as f:
+    fault_label = f"label_{label_mask}"
+    meta = {
+        "fault_type": fault_label,
+        "fault_params": {"unbalance": float(np.random.uniform(0.01, 0.6))},
+        "payload": payload_kg,
+        "cg_bias": list(cg_bias),
+    }
+    with open(os.path.join(out_run, "meta.json"), "w") as f:
         json.dump(meta, f)
+
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--base', required=True)
-    p.add_argument('--out-count', type=int, default=50)
-    p.add_argument('--out-prefix', default='run_real')
+    p.add_argument("--base", required=True)
+    p.add_argument("--out-count", type=int, default=50)
+    p.add_argument("--out-prefix", default="run_real")
     args = p.parse_args()
 
     base = args.base
     if not os.path.isdir(base):
-        print('Base not found:', base); return
+        print("Base not found:", base)
+        return
     # Quick check: ensure base run contains imu data
-    has_imu = any(os.path.exists(os.path.join(base, nm)) for nm in ('imu.csv','imu_full.csv'))
+    has_imu = any(os.path.exists(os.path.join(base, nm)) for nm in ("imu.csv", "imu_full.csv"))
     if not has_imu:
-        print('Base run has no imu.csv or imu_full.csv; skipping realistic run generation for base:', base)
+        print("Base run has no imu.csv or imu_full.csv; skipping realistic run generation for base:", base)
         return
     out_root = os.path.dirname(base)
     created = 0
@@ -102,10 +118,12 @@ def main():
         run_dir = os.path.join(out_root, run_name)
         ok = generate_run(base, run_dir, mask, payload_kg=payload, cg_bias=cg_bias)
         if not ok:
-            print('Skipping creation of', run_dir, 'because base imu missing')
+            print("Skipping creation of", run_dir, "because base imu missing")
             break
-        created += 1; i += 1
-    print('Generated', created, 'realistic runs in', out_root)
+        created += 1
+        i += 1
+    print("Generated", created, "realistic runs in", out_root)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

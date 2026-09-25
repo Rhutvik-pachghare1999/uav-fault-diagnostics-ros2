@@ -15,6 +15,7 @@ def severity_from_ur(ur: float) -> int:
         return 2
     return 3
 
+
 def severity_from_thrust_loss(thrust_loss: float) -> int:
     if thrust_loss is None:
         return 0

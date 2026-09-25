@@ -1,42 +1,82 @@
-# UAV Aegis: Operational Command Guide
+# UAV Fault Diagnostics: Verified Command Reference
 
-Follow these commands in order to re-run the pipeline or launch the diagnostic suite.
+Every command below was run in this repository on Linux (Python 3.12,
+torch CPU). Default arguments already point at the sealed artifacts
+(ml_sealed.h5, models/cnn_sealed.pth), so most can be copied verbatim.
 
-### 1. Dataset Inspection
-Verify the HDF5 dataset integrity and visualize raw signals.
-```powershell
-py scripts/inspect_dataset_and_plot.py --h5 scripts/data_out/ml_dataset_v2_auto.h5
+### 1. Inspect the dataset
+Print dataset contents and per-split statistics, render sample windows.
+```bash
+python3 scripts/inspect_dataset_and_plot.py --h5 ml_sealed.h5
 ```
 
-### 2. Model Training
-Train the 2D-CNN model for 10000 epochs (standard stress test).
-```powershell
-py scripts/train_cnn.py --data scripts/data_out/ml_dataset_v2_auto.h5 --epochs 10000
+### 2. Train the classifier
+Train the 2D-CNN on the sealed dataset (train/val splits only; the test
+split is held out). ~100 epochs is enough with the sealed protocol.
+```bash
+python3 scripts/train_cnn.py --h5 ml_sealed.h5 --out models/cnn_sealed.pth --epochs 100
 ```
 
-### 3. Smoke Test
-Perform a quick inference check on the trained model.
-```powershell
-py scripts/smoke_test.py --h5 scripts/data_out/ml_dataset_v2_auto.h5 --model scripts/models/cnn_final_best.pth
+### 3. Smoke test
+One forward pass through the checkpoint on a real dataset window, using the
+checkpoint's own normalization metadata.
+```bash
+python3 scripts/smoke_test.py --h5 ml_sealed.h5 --model models/cnn_sealed.pth
 ```
 
-### 4. Full Evaluation
-Generate a comprehensive classification report and confusion matrix.
-```powershell
-py scripts/eval_classifier.py --h5 scripts/data_out/ml_dataset_v2_auto.h5 --model scripts/models/cnn_final_best.pth
+### 4. Evaluate on the held-out test split
+Writes the accuracy metrics, per-run accuracy, classification report and
+confusion matrix into results/eval_sealed/.
+```bash
+python3 scripts/eval_classifier.py --h5 ml_sealed.h5 --model models/cnn_sealed.pth
 ```
 
-### 5. Training Visualization
-Plot the loss and accuracy curves from the training logs.
-```powershell
-py scripts/plot_training_curves.py --log scripts/logs/train.log
+### 5. Training curves
+Plot loss/accuracy curves from a training history JSON.
+```bash
+python3 scripts/plot_training_curves.py --log results/train_history_sealed.json --out results_plots
 ```
 
-### 6. Launch UAV Aegis v3 Dashboard
-Start the professional industrial diagnostic & prognostic suite.
-```powershell
-py -m streamlit run scripts/dashboard.py
+### 6. Dashboard (artifact inspector)
+Interactive inspector of the dataset, windows, spectra and real evaluation
+results. No simulated telemetry.
+```bash
+python3 -m streamlit run scripts/dashboard.py
+```
+
+### 7. ROS2 live inference node (requires ROS 2 Jazzy)
+Publishes softmax fault probabilities on /fault_detection from /imu/data
+(plus a /rpm topic for models that consume motor RPM). Validated at the
+500 Hz dataset rate; invalid orientation or a rate mismatch suspends
+inference with an error log.
+```bash
+source /opt/ros/jazzy/setup.sh
+source $(pwd)/ros2_ws/install/setup.sh
+ros2 run uav_aegis fault_inference_node --model models/cnn_imu9.pth \
+    --topic /imu/data --publish_topic /fault_detection
+# replay a healthy CSV through the full live validation path instead:
+ros2 run uav_aegis fault_inference_node --mode replay \
+    --input isaac_dataset/run_cf2x_healthy_p00_s0/imu.csv \
+    --model models/cnn_imu9.pth --output results/replay_test.csv
+```
+
+### 8. PX4 log / CSV replay (offline inference, no ROS needed)
+```bash
+python3 scripts/px4_log_replay.py --mode offline \
+    isaac_dataset/run_cf2x_mask01_p00_s0/imu.csv \
+    --model models/cnn_imu9.pth --output results/replay_test.csv
+# ROS2 publisher mode (real orientation from the log where available):
+python3 scripts/px4_log_replay.py --mode ros2 <imu.csv-or-.ulg> --model models/cnn_imu9.pth
+```
+
+### 9. Full pipeline reproduction
+Builds the sealed dataset, trains, evaluates, runs LOSO/uncertainty/
+benchmark analyses and the deployment replay check end-to-end.
+```bash
+./reproduce.sh
 ```
 
 ---
-Refer to README.MD for detailed architecture and problem/solution context.
+See README.MD for architecture, honest-results context, and the safety
+rules for live deployment. The models classify 16 known fault classes
+over 0.2 s IMU windows; they do not estimate remaining useful life.

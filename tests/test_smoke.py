@@ -1,11 +1,11 @@
 """Smoke tests – fast, no model weights required."""
+
 import importlib
 import os
 import sys
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 # Make scripts directory importable
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
@@ -15,9 +15,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 # ── Config ────────────────────────────────────────────────────────────────────
 def test_config_importable():
     """config.py must be importable without errors."""
-    spec = importlib.util.spec_from_file_location(
-        "config", SCRIPTS_DIR / "config.py"
-    )
+    spec = importlib.util.spec_from_file_location("config", SCRIPTS_DIR / "config.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod is not None
@@ -25,9 +23,7 @@ def test_config_importable():
 
 # ── Severity utils ────────────────────────────────────────────────────────────
 def test_severity_utils_importable():
-    spec = importlib.util.spec_from_file_location(
-        "severity_utils", SCRIPTS_DIR / "severity_utils.py"
-    )
+    spec = importlib.util.spec_from_file_location("severity_utils", SCRIPTS_DIR / "severity_utils.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     assert mod is not None
@@ -40,11 +36,14 @@ def test_benchmark_smoke(tmp_path, monkeypatch):
     # Set results dir to tmp_path for isolation
     env = os.environ.copy()
     env["BENCHMARK_RESULTS_DIR"] = str(tmp_path / "results")
-    import subprocess, sys
+    import subprocess
+    import sys
+
     result = subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / "benchmarks" / "run_benchmark.py"), "--smoke"],
-        capture_output=True, text=True,
-        env=env
+        capture_output=True,
+        text=True,
+        env=env,
     )
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "results" / "benchmark_metrics.csv").exists()

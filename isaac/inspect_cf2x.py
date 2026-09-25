@@ -1,5 +1,6 @@
 """Inspect the Bitcraze Crazyflie 2.1 (cf2x.usd) drone asset: links, joints, drives, masses."""
 
+import os
 import sys
 import traceback
 
@@ -16,7 +17,17 @@ def log(msg):
 try:
     from pxr import Usd, UsdPhysics, PhysxSchema
 
-    STAGE_PATH = "/home/rhutvik/uav-fault-diagnostics-ros2/isaac/assets/Bitcraze/Crazyflie/cf2x.usd"
+    STAGE_PATH = os.environ.get(
+        "CF2X_USD",
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "isaac",
+            "assets",
+            "Bitcraze",
+            "Crazyflie",
+            "cf2x.usd",
+        ),
+    )
     stage = Usd.Stage.Open(STAGE_PATH)
     log("STAGE_OPENED")
 
@@ -35,7 +46,10 @@ try:
             api += " [ArticulationRoot]"
         if prim.HasAPI(UsdPhysics.MassAPI):
             mapi = UsdPhysics.MassAPI(prim)
-            api += f" [Mass={mapi.GetMassAttr().Get()} Rho={mapi.GetDensityAttr().Get()} COM={mapi.GetCenterOfMassAttr().Get()}]"
+            api += (
+                f" [Mass={mapi.GetMassAttr().Get()} Rho={mapi.GetDensityAttr().Get()}"
+                f" COM={mapi.GetCenterOfMassAttr().Get()}]"
+            )
         if prim.IsA(UsdPhysics.Joint):
             j = UsdPhysics.Joint(prim)
             api += f" [Joint b0={j.GetBody0Rel().GetTargets()} b1={j.GetBody1Rel().GetTargets()}]"
@@ -55,8 +69,10 @@ try:
             log(f"  body0={j.GetBody0Rel().GetTargets()} body1={j.GetBody1Rel().GetTargets()}")
             if prim.HasAPI(PhysxSchema.PhysxDriveAPI):
                 d = PhysxSchema.PhysxDriveAPI(prim)
-                log(f"  PhysxDrive: type={d.GetDriveTypeAttr().Get()} stiffness={d.GetDriveStiffnessAttr().Get()} "
-                    f"damping={d.GetDriveDampingAttr().Get()} maxVel={d.GetMaxJointVelocityAttr().Get()}")
+                log(
+                    f"  PhysxDrive: type={d.GetDriveTypeAttr().Get()} stiffness={d.GetDriveStiffnessAttr().Get()} "
+                    f"damping={d.GetDriveDampingAttr().Get()} maxVel={d.GetMaxJointVelocityAttr().Get()}"
+                )
             if prim.HasAPI(UsdPhysics.DriveAPI):
                 d = UsdPhysics.DriveAPI(prim)
                 try:
@@ -68,19 +84,25 @@ try:
     for prim in stage.Traverse():
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):
             m = UsdPhysics.MassAPI(prim)
-            log(f"BODY: {prim.GetPath().pathString} mass={m.GetMassAttr().Get()} "
+            log(
+                f"BODY: {prim.GetPath().pathString} mass={m.GetMassAttr().Get()} "
                 f"density={m.GetDensityAttr().Get()} com={m.GetCenterOfMassAttr().Get()} "
-                f"inertia_diag={m.GetDiagonalInertiaAttr().Get()}")
+                f"inertia_diag={m.GetDiagonalInertiaAttr().Get()}"
+            )
             rb = UsdPhysics.RigidBodyAPI(prim)
-            log(f"      kinematic={rb.GetKinematicEnabledAttr().Get()} "
-                f"disableGravity={rb.GetDisableGravityAttr().Get()}")
+            log(
+                f"      kinematic={rb.GetKinematicEnabledAttr().Get()} "
+                f"disableGravity={rb.GetDisableGravityAttr().Get()}"
+            )
 
     log("=== REVOLUTE JOINT AXES ===")
     for prim in stage.Traverse():
         if prim.IsA(UsdPhysics.RevoluteJoint):
             rj = UsdPhysics.RevoluteJoint(prim)
-            log(f"REVOLUTE: {prim.GetPath().pathString} axis={rj.GetAxisAttr().Get()} "
-                f"limLo={rj.GetLowerLimitAttr().Get()} limHi={rj.GetUpperLimitAttr().Get()}")
+            log(
+                f"REVOLUTE: {prim.GetPath().pathString} axis={rj.GetAxisAttr().Get()} "
+                f"limLo={rj.GetLowerLimitAttr().Get()} limHi={rj.GetUpperLimitAttr().Get()}"
+            )
 
     log("INSPECT_DONE")
 except Exception:

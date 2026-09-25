@@ -20,6 +20,7 @@ Usage:
     python3 scripts/eval_cross_speed.py --dataset ml_sealed.h5 \
         --model models/cnn_sealed.pth --output results/cross_speed_zeroshot.json
 """
+
 import argparse
 import ast
 import json
@@ -82,8 +83,9 @@ def load_originals(path):
     """
     with h5py.File(path, "r") as f:
         if "is_aug" not in f or "run_id" not in f:
-            raise SystemExit("dataset must be ml_sealed.h5 (needs run_id + is_aug); "
-                             "build it with scripts/build_sealed_dataset.py")
+            raise SystemExit(
+                "dataset must be ml_sealed.h5 (needs run_id + is_aug); build it with scripts/build_sealed_dataset.py"
+            )
         meta = parse_h5_meta(f)
         mask = f["is_aug"][:] == 0
         X_all = f["X"][:]
@@ -96,7 +98,7 @@ def load_originals(path):
 
 def run_level_rpm_bins(X, run_id, n_bins):
     """Assign every RUN to an RPM bin by its median RPM (rpm1-4 channels)."""
-    rpm = X[:, 0, :4, :].mean(axis=(1, 2))            # per-window mean RPM
+    rpm = X[:, 0, :4, :].mean(axis=(1, 2))  # per-window mean RPM
     run_ids = np.unique(run_id)
     run_med = {int(r): float(np.median(rpm[run_id == r])) for r in run_ids}
     medians = np.array([run_med[int(r)] for r in run_ids])
@@ -105,9 +107,8 @@ def run_level_rpm_bins(X, run_id, n_bins):
     for i in range(1, len(edges)):
         if edges[i] <= edges[i - 1]:
             edges[i] = edges[i - 1] + 1e-6
-    run_bin = {int(r): int(np.searchsorted(edges, run_med[int(r)], side="right") - 1)
-               for r in run_ids}
-    for r in run_bin:                                # clamp
+    run_bin = {int(r): int(np.searchsorted(edges, run_med[int(r)], side="right") - 1) for r in run_ids}
+    for r in run_bin:  # clamp
         run_bin[r] = min(max(run_bin[r], 0), n_bins - 1)
     bin_of_window = np.array([run_bin[int(r)] for r in run_id], dtype="int64")
     bin_ranges = [(float(edges[i]), float(edges[i + 1])) for i in range(n_bins)]
@@ -116,8 +117,7 @@ def run_level_rpm_bins(X, run_id, n_bins):
 
 def make_fold_data(X, y, run_id, fold_bin, bin_of_window, aug_copies, fold_seed, vars_meta):
     """Train data = non-bin runs (originals + seeded augs); val = grouped run holdout."""
-    rng = np.random.RandomState(fold_seed)
-    np.random.seed(fold_seed)          # augment_sample uses the global RNG
+    np.random.seed(fold_seed)  # augment_sample uses the global RNG
     torch.manual_seed(fold_seed)
 
     train_mask = bin_of_window != fold_bin
@@ -135,31 +135,27 @@ def make_fold_data(X, y, run_id, fold_bin, bin_of_window, aug_copies, fold_seed,
     aug_idx = [i for i in tr_idx if int(run_id[i]) not in val_runs]
     n_aug_rows = len(aug_idx) * aug_copies
     X_tr = np.empty((len(tr_idx) + n_aug_rows,) + X.shape[1:], dtype="float32")
-    X_tr[:len(tr_idx)] = X[tr_idx]
+    X_tr[: len(tr_idx)] = X[tr_idx]
     out_row = len(tr_idx)
     chunk = 4096
     for copy_i in range(aug_copies):
         for s in range(0, len(aug_idx), chunk):
-            block = aug_idx[s:s + chunk]
+            block = aug_idx[s : s + chunk]
             for j, i in enumerate(block):
-                X_tr[out_row + j, 0] = augment_sample(
-                    X[i][0].astype("float64"), vars_meta).astype("float32")
+                X_tr[out_row + j, 0] = augment_sample(X[i][0].astype("float64"), vars_meta).astype("float32")
             out_row += len(block)
     y_tr = np.empty(len(tr_idx) + n_aug_rows, dtype=y.dtype)
-    y_tr[:len(tr_idx)] = y[tr_idx]
+    y_tr[: len(tr_idx)] = y[tr_idx]
     for copy_i in range(aug_copies):
-        y_tr[len(tr_idx) + copy_i * len(aug_idx):
-             len(tr_idx) + (copy_i + 1) * len(aug_idx)] = y[aug_idx]
+        y_tr[len(tr_idx) + copy_i * len(aug_idx) : len(tr_idx) + (copy_i + 1) * len(aug_idx)] = y[aug_idx]
     return X_tr, y_tr, X[val_idx], y[val_idx], len(tr_idx), len(val_idx)
 
 
 def train_fold(X_tr, y_tr, X_val, y_val, n_faults, device, epochs, batch_size, patience):
-    mean = X_tr.mean(axis=(0, 1, 3), keepdims=True).astype("float32")   # (1,1,C,1)
+    mean = X_tr.mean(axis=(0, 1, 3), keepdims=True).astype("float32")  # (1,1,C,1)
     std = X_tr.std(axis=(0, 1, 3), keepdims=True).astype("float32")
-    tr_loader = DataLoader(ArrayDataset(X_tr, y_tr, mean, std), batch_size=batch_size,
-                           shuffle=True, num_workers=2)
-    val_loader = DataLoader(ArrayDataset(X_val, y_val, mean, std), batch_size=batch_size,
-                            shuffle=False, num_workers=2)
+    tr_loader = DataLoader(ArrayDataset(X_tr, y_tr, mean, std), batch_size=batch_size, shuffle=True, num_workers=2)
+    val_loader = DataLoader(ArrayDataset(X_val, y_val, mean, std), batch_size=batch_size, shuffle=False, num_workers=2)
     model = PaperCNN(in_channels=1, base_filters=32, num_classes=n_faults).to(device)
     opt = optim.Adam(model.parameters(), lr=0.01)
     loss_fn = nn.CrossEntropyLoss()
@@ -176,8 +172,11 @@ def train_fold(X_tr, y_tr, X_val, y_val, n_faults, device, epochs, batch_size, p
             if xb.dim() == 3:
                 xb = xb.unsqueeze(1)
             loss = loss_fn(model(xb), yb)
-            opt.zero_grad(); loss.backward(); opt.step()
-            tot += float(loss.item()); cnt += 1
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            tot += float(loss.item())
+            cnt += 1
         model.eval()
         correct, total, vloss, vcnt = 0, 0, 0.0, 0
         with torch.no_grad():
@@ -188,8 +187,10 @@ def train_fold(X_tr, y_tr, X_val, y_val, n_faults, device, epochs, batch_size, p
                 if xb.dim() == 3:
                     xb = xb.unsqueeze(1)
                 pf = model(xb)
-                correct += int((pf.argmax(1) == yb).sum().item()); total += len(yb)
-                vloss += float(loss_fn(pf, yb).item()); vcnt += 1
+                correct += int((pf.argmax(1) == yb).sum().item())
+                total += len(yb)
+                vloss += float(loss_fn(pf, yb).item())
+                vcnt += 1
         val_acc = correct / total if total else 0.0
         hist["train_loss"].append(tot / cnt if cnt else 0.0)
         hist["val_acc"].append(val_acc)
@@ -211,12 +212,12 @@ def predict(model, X, mean, std, device, batch_size=1024):
     model.eval()
     with torch.no_grad():
         for s in range(0, len(X), batch_size):
-            xb = X[s:s + batch_size].astype("float32")
+            xb = X[s : s + batch_size].astype("float32")
             xb = (xb - mean) / (std + 1e-9)
             inp = torch.from_numpy(xb)
             if inp.dim() == 3:
                 inp = inp.unsqueeze(1)
-            preds[s:s + batch_size] = model(inp.to(device)).argmax(1).cpu().numpy()
+            preds[s : s + batch_size] = model(inp.to(device)).argmax(1).cpu().numpy()
     return preds
 
 
@@ -234,13 +235,10 @@ def eval_bin(y_true, y_pred, run_id_bin):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--dataset", default="ml_sealed.h5")
-    p.add_argument("--model", default=None,
-                   help="pretrained model for ZERO-SHOT mode (ignored with --retrain)")
-    p.add_argument("--retrain", action="store_true",
-                   help="TRUE leave-one-RPM-bin-out: fresh training per bin")
+    p.add_argument("--model", default=None, help="pretrained model for ZERO-SHOT mode (ignored with --retrain)")
+    p.add_argument("--retrain", action="store_true", help="TRUE leave-one-RPM-bin-out: fresh training per bin")
     p.add_argument("--n-speed-bins", type=int, default=4)
-    p.add_argument("--epochs", type=int, default=30,
-                   help="epoch cap per LOSO retrain (compute budget)")
+    p.add_argument("--epochs", type=int, default=30, help="epoch cap per LOSO retrain (compute budget)")
     p.add_argument("--patience", type=int, default=10)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--aug-copies", type=int, default=2)
@@ -263,11 +261,13 @@ def main():
     bins_summary = {}
     for b, (lo, hi) in enumerate(bin_ranges):
         runs_in_b = sorted(int(r) for r, bb in run_bin.items() if bb == b)
-        bins_summary[b] = {"rpm_range": [lo, hi], "n_runs": len(runs_in_b),
-                           "runs": runs_in_b,
-                           "n_windows": int((bin_of_window == b).sum())}
-        print(f"  bin {b}: {lo:.0f}-{hi:.0f} RPM, {len(runs_in_b)} runs, "
-              f"{bins_summary[b]['n_windows']} windows")
+        bins_summary[b] = {
+            "rpm_range": [lo, hi],
+            "n_runs": len(runs_in_b),
+            "runs": runs_in_b,
+            "n_windows": int((bin_of_window == b).sum()),
+        }
+        print(f"  bin {b}: {lo:.0f}-{hi:.0f} RPM, {len(runs_in_b)} runs, {bins_summary[b]['n_windows']} windows")
 
     mode = "loso-retrain" if args.retrain else "zero-shot"
     results = {}
@@ -279,8 +279,9 @@ def main():
         ck = torch.load(args.model, map_location="cpu")
         m = ck.get("meta", {}) if isinstance(ck, dict) else {}
         sd = ck.get("state_dict", ck) if isinstance(ck, dict) else ck
-        zero_model = PaperCNN(in_channels=1, base_filters=int(m.get("base_filters", 32)),
-                              num_classes=int(m.get("n_faults", n_faults)))
+        zero_model = PaperCNN(
+            in_channels=1, base_filters=int(m.get("base_filters", 32)), num_classes=int(m.get("n_faults", n_faults))
+        )
         zero_model.load_state_dict(sd)
         zero_model.to(device).eval()
         z_mean = np.array(m.get("mean"), dtype="float32") if m.get("mean") is not None else None
@@ -290,27 +291,57 @@ def main():
         lo, hi = bin_ranges[b]
         te_mask = bin_of_window == b
         te_idx = np.where(te_mask)[0]
-        print(f"\n=== bin {b}: {lo:.0f}-{hi:.0f} RPM | "
-              f"{len(bins_summary[b]['runs'])} test runs, {len(te_idx)} test windows ===",
-              flush=True)
+        print(
+            f"\n=== bin {b}: {lo:.0f}-{hi:.0f} RPM | "
+            f"{len(bins_summary[b]['runs'])} test runs, {len(te_idx)} test windows ===",
+            flush=True,
+        )
         if args.retrain:
             X_tr, y_tr, X_val, y_val, n_tr, n_va = make_fold_data(
-                X, y, run_id, b, bin_of_window, args.aug_copies,
+                X,
+                y,
+                run_id,
+                b,
+                bin_of_window,
+                args.aug_copies,
                 fold_seed=args.seed + 100 * b,
-                vars_meta=h5_meta.get("vars", []))
-            print(f"  fold train: {len(X_tr)} windows ({n_tr} orig + augs), "
-                  f"fold val: {n_va} windows — bin {b} fully held out", flush=True)
+                vars_meta=h5_meta.get("vars", []),
+            )
+            print(
+                f"  fold train: {len(X_tr)} windows ({n_tr} orig + augs), "
+                f"fold val: {n_va} windows — bin {b} fully held out",
+                flush=True,
+            )
             model, mean, std, best_val, hist = train_fold(
-                X_tr, y_tr, X_val, y_val, n_faults, device,
-                epochs=args.epochs, batch_size=args.batch_size, patience=args.patience)
+                X_tr,
+                y_tr,
+                X_val,
+                y_val,
+                n_faults,
+                device,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                patience=args.patience,
+            )
             mpath = os.path.join(args.models_out, f"bin{b}.pth")
-            torch.save({"state_dict": model.state_dict(),
-                        "meta": {"n_faults": n_faults, "mean": mean.tolist(),
-                                 "std": std.tolist(), "protocol": "loso-retrain",
-                                 "held_out_bin": b,
-                                 "rpm_range": [lo, hi], "seed": args.seed + 100 * b,
-                                 "fault_label_map": h5_meta.get("fault_label_map", {}),
-                                 "vars": h5_meta.get("vars", [])}}, mpath)
+            torch.save(
+                {
+                    "state_dict": model.state_dict(),
+                    "meta": {
+                        "n_faults": n_faults,
+                        "mean": mean.tolist(),
+                        "std": std.tolist(),
+                        "protocol": "loso-retrain",
+                        "held_out_bin": b,
+                        "base_filters": 32,
+                        "rpm_range": [lo, hi],
+                        "seed": args.seed + 100 * b,
+                        "fault_label_map": h5_meta.get("fault_label_map", {}),
+                        "vars": h5_meta.get("vars", []),
+                    },
+                },
+                mpath,
+            )
             print(f"  retrained (best fold-val acc {best_val:.4f}) -> {mpath}", flush=True)
             preds = predict(model, X[te_idx], mean, std, device)
             del X_tr, model
@@ -332,35 +363,51 @@ def main():
             "per_run_accuracy_mean": float(np.mean(run_accs)),
             "per_run_accuracy_min": float(np.min(run_accs)),
         }
-        print(f"  window_acc={acc:.4f} balanced_acc={bal:.4f} macro_f1={f1m:.4f} "
-              f"per-run mean={np.mean(run_accs):.4f}", flush=True)
+        print(
+            f"  window_acc={acc:.4f} balanced_acc={bal:.4f} macro_f1={f1m:.4f} per-run mean={np.mean(run_accs):.4f}",
+            flush=True,
+        )
 
     accs = [v["window_accuracy"] for v in results.values()]
     bals = [v["balanced_accuracy"] for v in results.values()]
-    summary = {"mode": mode,
-               "n_bins": args.n_speed_bins,
-               "window_accuracy_mean": float(np.mean(accs)),
-               "window_accuracy_std": float(np.std(accs)),
-               "window_accuracy_min": float(np.min(accs)),
-               "balanced_accuracy_mean": float(np.mean(bals)),
-               "balanced_accuracy_min": float(np.min(bals))}
+    summary = {
+        "mode": mode,
+        "n_bins": args.n_speed_bins,
+        "window_accuracy_mean": float(np.mean(accs)),
+        "window_accuracy_std": float(np.std(accs)),
+        "window_accuracy_min": float(np.min(accs)),
+        "balanced_accuracy_mean": float(np.mean(bals)),
+        "balanced_accuracy_min": float(np.min(bals)),
+    }
     print("\n" + "=" * 60)
     print(f"{mode.upper()} SUMMARY over {args.n_speed_bins} RPM bins:")
-    print(f"  window acc: mean={summary['window_accuracy_mean']:.4f} "
-          f"std={summary['window_accuracy_std']:.4f} min={summary['window_accuracy_min']:.4f}")
-    print(f"  balanced acc: mean={summary['balanced_accuracy_mean']:.4f} "
-          f"min={summary['balanced_accuracy_min']:.4f}")
+    print(
+        f"  window acc: mean={summary['window_accuracy_mean']:.4f} "
+        f"std={summary['window_accuracy_std']:.4f} min={summary['window_accuracy_min']:.4f}"
+    )
+    print(f"  balanced acc: mean={summary['balanced_accuracy_mean']:.4f} min={summary['balanced_accuracy_min']:.4f}")
 
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
     with open(args.output, "w") as f:
-        json.dump({"mode": mode, "dataset": args.dataset, "seed": args.seed,
-                   "bins": {str(b): {k: v for k, v in bins_summary[b].items()}
-                            for b in bins_summary},
-                   "config": {"epochs_cap": args.epochs, "patience": args.patience,
-                              "batch_size": args.batch_size,
-                              "aug_copies": args.aug_copies,
-                              "rpm_bins": args.n_speed_bins},
-                   "summary": summary, "results": results}, f, indent=2)
+        json.dump(
+            {
+                "mode": mode,
+                "dataset": args.dataset,
+                "seed": args.seed,
+                "bins": {str(b): {k: v for k, v in bins_summary[b].items()} for b in bins_summary},
+                "config": {
+                    "epochs_cap": args.epochs,
+                    "patience": args.patience,
+                    "batch_size": args.batch_size,
+                    "aug_copies": args.aug_copies,
+                    "rpm_bins": args.n_speed_bins,
+                },
+                "summary": summary,
+                "results": results,
+            },
+            f,
+            indent=2,
+        )
     print(f"Results saved to {args.output}", flush=True)
 
 

@@ -58,7 +58,7 @@ try:
     import omni.usd
     from isaacsim.core.api import World
     from isaacsim.sensors.physics import _sensor
-    from pxr import Gf, Sdf, Usd, UsdGeom, UsdPhysics, UsdUtils
+    from pxr import Gf, Sdf, UsdPhysics, UsdUtils
     from pxr import PhysicsSchemaTools
 
     try:
@@ -70,7 +70,17 @@ try:
     except ImportError:
         from isaacsim.core.api import Articulation as ArticCls
 
-    ASSET = "/home/rhutvik/uav-fault-diagnostics-ros2/isaac/assets/Bitcraze/Crazyflie/cf2x.usd"
+    ASSET = os.environ.get(
+        "CF2X_USD",
+        os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "isaac",
+            "assets",
+            "Bitcraze",
+            "Crazyflie",
+            "cf2x.usd",
+        ),
+    )
     CF_PATH = "/World/cf2x"
     BODY_PATH = "/World/cf2x/body"
     PROP_PATHS = [f"/World/cf2x/m{i}_prop" for i in (1, 2, 3, 4)]
@@ -82,35 +92,33 @@ try:
     DT = 1.0 / PHYS_HZ
 
     # ----- Crazyflie parameters -----
-    M_BODY_ASSET = 0.025          # kg (from USD)
-    M_PROP = 0.0008               # kg each (from USD)
-    BASE_MASS = M_BODY_ASSET + 4 * M_PROP   # ~28.2 g
-    K_THRUST = 7.7e-7             # N/(rad/s)^2 -> hover w ~ 300 rad/s (~2865 RPM)
-    C_YAW = 0.010 * K_THRUST      # prop drag torque coefficient
+    M_BODY_ASSET = 0.025  # kg (from USD)
+    M_PROP = 0.0008  # kg each (from USD)
+    BASE_MASS = M_BODY_ASSET + 4 * M_PROP  # ~28.2 g
+    K_THRUST = 7.7e-7  # N/(rad/s)^2 -> hover w ~ 300 rad/s (~2865 RPM)
+    C_YAW = 0.010 * K_THRUST  # prop drag torque coefficient
     ROTOR_DIR = np.array([+1.0, -1.0, +1.0, -1.0])  # m1 CCW, m2 CW, m3 CCW, m4 CW
-    MOTOR_DAMP = 4.0e-6           # N*m*s/rad nominal drive damping
+    MOTOR_DAMP = 4.0e-6  # N*m*s/rad nominal drive damping
     HOVER_ALT = 0.55
     RPM_CONV = 60.0 / (2.0 * math.pi)
-    RAD2DEG = 180.0 / math.pi   # USD angular drives take deg/s, API returns rad/s
+    RAD2DEG = 180.0 / math.pi  # USD angular drives take deg/s, API returns rad/s
 
     # ----- fault profile (applied to each faulted rotor) -----
-    F_COM_OFFSET = 0.6e-3   # m prop COM eccentricity -> real 1P centrifugal force
-    F_AERO_1P = 0.15        # thrust once-per-rev harmonic (chipped blade)
-    F_EFFICIENCY = 0.85     # thrust efficiency loss (eroded blade)
-    F_MOTOR_GAIN = 0.75     # drive damping scale (weakened motor -> RPM sag)
-    F_UR = 0.30             # reported unbalance ratio per faulted rotor
+    F_COM_OFFSET = 0.6e-3  # m prop COM eccentricity -> real 1P centrifugal force
+    F_AERO_1P = 0.15  # thrust once-per-rev harmonic (chipped blade)
+    F_EFFICIENCY = 0.85  # thrust efficiency loss (eroded blade)
+    F_MOTOR_GAIN = 0.75  # drive damping scale (weakened motor -> RPM sag)
+    F_UR = 0.30  # reported unbalance ratio per faulted rotor
 
     # fallback arm geometry (Bitcraze spec) if USD joints carry no translation
-    CF_SPEC_OFFSETS = np.array([
-        [0.0325, 0.0325, 0.003], [0.0325, -0.0325, 0.003],
-        [-0.0325, -0.0325, 0.003], [-0.0325, 0.0325, 0.003]])
-
+    CF_SPEC_OFFSETS = np.array(
+        [[0.0325, 0.0325, 0.003], [0.0325, -0.0325, 0.003], [-0.0325, -0.0325, 0.003], [-0.0325, 0.0325, 0.003]]
+    )
 
     def _set(api, create, value):
         attr = getattr(api, create)(value)
         attr.Set(value)
         return attr
-
 
     def quat_to_rpy(q):
         w, x, y, z = q
@@ -119,19 +127,19 @@ try:
         yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
         return roll, pitch, yaw
 
-
     def quat_to_R(q):
         w, x, y, z = q
-        return np.array([
-            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
-            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
-            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)]])
-
+        return np.array(
+            [
+                [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+                [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+                [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+            ]
+        )
 
     class CFXSim:
         def __init__(self):
-            self.world = World(stage_units_in_meters=1.0, physics_dt=DT,
-                               rendering_dt=1.0 / 30.0)
+            self.world = World(stage_units_in_meters=1.0, physics_dt=DT, rendering_dt=1.0 / 30.0)
             self.stage = omni.usd.get_context().get_stage()
 
             ref_prim = self.stage.DefinePrim(CF_PATH, "Xform")
@@ -167,8 +175,8 @@ try:
             M = np.zeros((4, 4))
             M[0, :] = 1.0
             for i, o in enumerate(self.arm_offsets):
-                M[1, i] = o[1]      # tau_x = sum y_i * T_i   (r x F, F=(0,0,T))
-                M[2, i] = -o[0]     # tau_y = sum -x_i * T_i
+                M[1, i] = o[1]  # tau_x = sum y_i * T_i   (r x F, F=(0,0,T))
+                M[2, i] = -o[0]  # tau_y = sum -x_i * T_i
             self.Minv = np.linalg.pinv(M)
 
             # IMU sensor on the body link
@@ -176,10 +184,12 @@ try:
             try:
                 out = omni.kit.commands.execute(
                     "IsaacSensorCreateImuSensor",
-                    path="/imu", parent=BODY_PATH,
+                    path="/imu",
+                    parent=BODY_PATH,
                     sensor_period=DT,
                     translation=Gf.Vec3d(0, 0, 0),
-                    orientation=Gf.Quatd(1, 0, 0, 0))
+                    orientation=Gf.Quatd(1, 0, 0, 0),
+                )
                 prim = out[1] if isinstance(out, tuple) and len(out) > 1 else None
                 if prim is not None and hasattr(prim, "GetPath"):
                     self.imu_path = str(prim.GetPath())
@@ -209,8 +219,7 @@ try:
             # mass API handles
             self.body_mass_api = UsdPhysics.MassAPI(self.stage.GetPrimAtPath(BODY_PATH))
             _set(self.body_mass_api, "CreateMassAttr", BASE_MASS)
-            self.prop_mass_api = [UsdPhysics.MassAPI(self.stage.GetPrimAtPath(p))
-                                  for p in PROP_PATHS]
+            self.prop_mass_api = [UsdPhysics.MassAPI(self.stage.GetPrimAtPath(p)) for p in PROP_PATHS]
             for a in self.prop_mass_api:
                 _set(a, "CreateCenterOfMassAttr", Gf.Vec3f(0, 0, 0))
 
@@ -218,8 +227,7 @@ try:
             self.physx = omni.physx.get_physx_simulation_interface()
             self.stage_id = UsdUtils.StageCache.Get().GetId(self.stage).ToLongInt()
             self.body_pid = PhysicsSchemaTools.sdfPathToInt(Sdf.Path(BODY_PATH))
-            self.prop_pids = [PhysicsSchemaTools.sdfPathToInt(Sdf.Path(p))
-                               for p in PROP_PATHS]
+            self.prop_pids = [PhysicsSchemaTools.sdfPathToInt(Sdf.Path(p)) for p in PROP_PATHS]
 
             self.art = ArticCls(CF_PATH)
             self.world.reset()
@@ -250,8 +258,7 @@ try:
             self.z_integ = 0.0
             # thrust-aware spin-up: hold the true hover speed for THIS
             # fault/payload configuration so the drone does not sink at spawn
-            k_eff = np.mean([F_EFFICIENCY if fault_mask & (1 << i) else 1.0
-                             for i in range(4)])
+            k_eff = np.mean([F_EFFICIENCY if fault_mask & (1 << i) else 1.0 for i in range(4)])
             w_hover = math.sqrt(self.mass * 9.81 / (4.0 * K_THRUST * k_eff)) * 1.03
             self.w_cmd_hold = np.array([w_hover] * 4)
 
@@ -260,10 +267,12 @@ try:
             _set(self.body_mass_api, "CreateMassAttr", M_BODY_ASSET + payload_g * 1e-3)
             for i in range(4):
                 faulted = bool(fault_mask & (1 << i))
-                _set(self.prop_mass_api[i], "CreateCenterOfMassAttr",
-                     Gf.Vec3f(F_COM_OFFSET, 0, 0) if faulted else Gf.Vec3f(0, 0, 0))
-                _set(self.drives[i], "CreateDampingAttr",
-                     MOTOR_DAMP * (F_MOTOR_GAIN if faulted else 1.0) * RAD2DEG)
+                _set(
+                    self.prop_mass_api[i],
+                    "CreateCenterOfMassAttr",
+                    Gf.Vec3f(F_COM_OFFSET, 0, 0) if faulted else Gf.Vec3f(0, 0, 0),
+                )
+                _set(self.drives[i], "CreateDampingAttr", MOTOR_DAMP * (F_MOTOR_GAIN if faulted else 1.0) * RAD2DEG)
                 _set(self.drives[i], "CreateTargetVelocityAttr", 0.0)
 
             # rebuild articulation so mass/COM/drive changes take effect
@@ -290,10 +299,12 @@ try:
         def _trajectory(self, t):
             r, w = 0.35, 2 * math.pi / 12.0
             ph = self.traj_phase
-            p = np.array([r * math.cos(w * t + ph), r * math.sin(w * t + ph),
-                          HOVER_ALT + 0.05 * math.sin(2 * w * t + ph)])
-            v = np.array([-r * w * math.sin(w * t + ph), r * w * math.cos(w * t + ph),
-                          0.05 * 2 * w * math.cos(2 * w * t + ph)])
+            p = np.array(
+                [r * math.cos(w * t + ph), r * math.sin(w * t + ph), HOVER_ALT + 0.05 * math.sin(2 * w * t + ph)]
+            )
+            v = np.array(
+                [-r * w * math.sin(w * t + ph), r * w * math.cos(w * t + ph), 0.05 * 2 * w * math.cos(2 * w * t + ph)]
+            )
             yaw_d = w * t + ph + math.pi / 2
             return p, v, yaw_d
 
@@ -304,8 +315,7 @@ try:
             # steady thrust deficit produced by degraded rotors, otherwise a
             # PD-only controller commands healthy-model RPMs forever and an
             # all-rotors-degraded vehicle can never leave the ground
-            self.z_integ = float(np.clip(
-                self.z_integ + (p_des[2] - pos[2]) * (1.0 / CTRL_HZ), -1.5, 2.5))
+            self.z_integ = float(np.clip(self.z_integ + (p_des[2] - pos[2]) * (1.0 / CTRL_HZ), -1.5, 2.5))
             a_des[2] += 1.2 * self.z_integ
             a_des = np.clip(a_des, -2.5, 2.5)
             a_cmd = a_des + np.array([0.0, 0.0, 9.81])
@@ -316,8 +326,7 @@ try:
             roll_d = math.atan2(ay_, az_)
             pitch_d = math.atan2(-ax_, math.sqrt(ay_ * ay_ + az_ * az_))
             yaw_err = math.atan2(math.sin(yaw_d - yaw), math.cos(yaw_d - yaw))
-            rate_d = np.clip(np.array([4.0 * (roll_d - roll), 4.0 * (pitch_d - pitch),
-                                       3.0 * yaw_err]), -3.0, 3.0)
+            rate_d = np.clip(np.array([4.0 * (roll_d - roll), 4.0 * (pitch_d - pitch), 3.0 * yaw_err]), -3.0, 3.0)
             tau = np.array([6e-4, 6e-4, 3e-4]) * (rate_d - np.asarray(gyro))
 
             # thrust allocation (roll/pitch torques); yaw handled via rotor drag
@@ -332,7 +341,7 @@ try:
 
             # 850 rad/s ceiling ~= 8100 RPM no-load: realistic ~1.5x hover
             # headroom so multi-rotor-fault cases retain climb authority
-            w_cmd = np.sqrt(np.clip(w_sq, 60.0 ** 2, 850.0 ** 2))
+            w_cmd = np.sqrt(np.clip(w_sq, 60.0**2, 850.0**2))
             return ROTOR_DIR * w_cmd
 
         # ---------------- one physics step ----------------
@@ -368,25 +377,22 @@ try:
             wind_f = self.wind * self.wind_gain
 
             # aerodynamics
-            thrusts = K_THRUST * self.k_t_fault * w_now ** 2 * (1.0 + self.a_1p * np.cos(psi))
+            thrusts = K_THRUST * self.k_t_fault * w_now**2 * (1.0 + self.a_1p * np.cos(psi))
             body_z = R[:, 2]
             for i in range(4):
                 hub = pos + R @ self.arm_offsets[i]
                 f = thrusts[i] * body_z
-                self.physx.apply_force_at_pos(
-                    self.stage_id, self.body_pid,
-                    carb.Float3(*f), carb.Float3(*hub), "Force")
+                self.physx.apply_force_at_pos(self.stage_id, self.body_pid, carb.Float3(*f), carb.Float3(*hub), "Force")
                 # prop aerodynamic drag torque (load on the motor)
                 tq = (-ROTOR_DIR[i] * C_YAW * w_now[i] ** 2) * body_z
                 self.physx.apply_torque(self.stage_id, self.prop_pids[i], carb.Float3(*tq))
             # drag reaction on the body (yaw torque)
-            tau_z = C_YAW * float(np.sum(-ROTOR_DIR * w_now ** 2))
-            self.physx.apply_torque(self.stage_id, self.body_pid,
-                                    carb.Float3(*(tau_z * body_z)))
+            tau_z = C_YAW * float(np.sum(-ROTOR_DIR * w_now**2))
+            self.physx.apply_torque(self.stage_id, self.body_pid, carb.Float3(*(tau_z * body_z)))
             # wind force
             self.physx.apply_force_at_pos(
-                self.stage_id, self.body_pid, carb.Float3(*wind_f),
-                carb.Float3(*pos), "Force")
+                self.stage_id, self.body_pid, carb.Float3(*wind_f), carb.Float3(*pos), "Force"
+            )
 
             self.world.step(False)
             self.t += DT
@@ -398,10 +404,8 @@ try:
         # ---------------- full run ----------------
         def run(self, fault_mask, payload_g, seed, duration_s, out_dir, run_name):
             self._begin_run(fault_mask, payload_g, seed)
-            self.k_t_fault = np.array([F_EFFICIENCY if (fault_mask >> i) & 1 else 1.0
-                                       for i in range(4)])
-            self.a_1p = np.array([F_AERO_1P if (fault_mask >> i) & 1 else 0.0
-                                  for i in range(4)])
+            self.k_t_fault = np.array([F_EFFICIENCY if (fault_mask >> i) & 1 else 1.0 for i in range(4)])
+            self.a_1p = np.array([F_AERO_1P if (fault_mask >> i) & 1 else 0.0 for i in range(4)])
 
             # spin-up + settle (not logged): rotors ramp with controller active
             self.t = 0.0
@@ -426,14 +430,10 @@ try:
                 state_rows[k, 15] = float(self.fault_mask)
 
             os.makedirs(out_dir, exist_ok=True)
-            imu_hdr = ("rpm1,rpm2,rpm3,rpm4,roll,pitch,yaw,"
-                       "gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z")
-            np.savetxt(os.path.join(out_dir, "imu.csv"), rows, delimiter=",",
-                       header=imu_hdr, comments="")
-            st_hdr = ("t,x,y,z,vx,vy,vz,psi1,psi2,psi3,psi4,rpm_cmd1,rpm_cmd2,"
-                      "rpm_cmd3,rpm_cmd4,fault_mask")
-            np.savetxt(os.path.join(out_dir, "state.csv"), state_rows, delimiter=",",
-                       header=st_hdr, comments="")
+            imu_hdr = "rpm1,rpm2,rpm3,rpm4,roll,pitch,yaw,gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z"
+            np.savetxt(os.path.join(out_dir, "imu.csv"), rows, delimiter=",", header=imu_hdr, comments="")
+            st_hdr = "t,x,y,z,vx,vy,vz,psi1,psi2,psi3,psi4,rpm_cmd1,rpm_cmd2,rpm_cmd3,rpm_cmd4,fault_mask"
+            np.savetxt(os.path.join(out_dir, "state.csv"), state_rows, delimiter=",", header=st_hdr, comments="")
 
             n_fault = bin(fault_mask).count("1")
             ur = min(F_UR * n_fault, 0.9)
@@ -464,11 +464,12 @@ try:
             }
             with open(os.path.join(out_dir, "meta.json"), "w") as f:
                 json.dump(meta, f, indent=2)
-            log(f"RUN_DONE name={run_name} samples={n_steps} "
+            log(
+                f"RUN_DONE name={run_name} samples={n_steps} "
                 f"hover_rpm={meta['hover_rpm_mean']:.0f} gyro_rms={gyro_rms:.4f} "
-                f"z_mean={float(np.mean(state_rows[:, 3])):.3f} out={out_dir}")
+                f"z_mean={float(np.mean(state_rows[:, 3])):.3f} out={out_dir}"
+            )
             return meta
-
 
     def parse_run_token(tok):
         mask, payload, seed = 0, 0, 0
@@ -481,11 +482,13 @@ try:
                 seed = int(p[1:])
         return mask, payload, seed, "run_cf2x_" + tok
 
-
     def main():
         parser = argparse.ArgumentParser()
-        parser.add_argument("--out-root", type=str,
-                            default="/home/rhutvik/uav-fault-diagnostics-ros2/isaac_dataset")
+        parser.add_argument(
+            "--out-root",
+            type=str,
+            default=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "isaac_dataset"),
+        )
         parser.add_argument("--duration", type=float, default=9.0)
         parser.add_argument("--runs", type=str, default="healthy_p00_s0")
         parser.add_argument("--list-runs", action="store_true")
@@ -508,7 +511,6 @@ try:
             out_dir = os.path.join(args.out_root, name)
             sim.run(mask, payload, seed, args.duration, out_dir, name)
         log("ALL_RUNS_DONE")
-
 
     main()
 except Exception:

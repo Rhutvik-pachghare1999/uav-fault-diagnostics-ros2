@@ -19,6 +19,7 @@ Usage:
   python3 scripts/build_sealed_dataset.py --h5 ml_dataset_v2.h5 \
       --manifest splits/split_manifest.json --out ml_sealed.h5
 """
+
 import argparse
 import glob
 import json
@@ -41,8 +42,9 @@ def main():
     ap.add_argument("--out", default="ml_sealed.h5")
     ap.add_argument("--project-root", default=".")
     ap.add_argument("--aug-seed", type=int, default=42)
-    ap.add_argument("--aug-copies", type=int, default=2,
-                    help="augmented copies per TRAIN window (total x3 with original)")
+    ap.add_argument(
+        "--aug-copies", type=int, default=2, help="augmented copies per TRAIN window (total x3 with original)"
+    )
     args = ap.parse_args()
 
     with open(args.manifest) as f:
@@ -50,14 +52,13 @@ def main():
 
     # run_id in the source h5 was assigned by sorted(glob(...)) order in
     # build_ml_dataset_v2.py; replicate it exactly to map ids -> run names.
-    run_names = [os.path.basename(p)
-                 for p in sorted(glob.glob(os.path.join(args.project_root,
-                                                        "isaac_dataset", "run_*")))]
+    run_names = [
+        os.path.basename(p) for p in sorted(glob.glob(os.path.join(args.project_root, "isaac_dataset", "run_*")))
+    ]
     if len(run_names) != 96:
         raise SystemExit(f"expected 96 run dirs, found {len(run_names)}")
     run_split = {}
-    for part, names in (("train", manifest["train"]), ("val", manifest["val"]),
-                        ("test", manifest["test"])):
+    for part, names in (("train", manifest["train"]), ("val", manifest["val"]), ("test", manifest["test"])):
         for n in names:
             run_split[n] = SPLIT_IDS[part]
     missing = set(run_names) - set(run_split)
@@ -69,7 +70,7 @@ def main():
         if isinstance(meta_raw, (bytes, bytearray)):
             meta_raw = meta_raw.decode("utf-8", errors="ignore")
         src_meta = json.loads(meta_raw)
-        X = f["X"][:]                      # (N,1,C,W)
+        X = f["X"][:]  # (N,1,C,W)
         y_fault = f["y_fault"][:]
         y_sev = f["y_sev"][:] if "y_sev" in f else np.zeros(len(X), dtype="int64")
         ur = f["ur"][:] if "ur" in f else np.zeros(len(X), dtype="float32")
@@ -94,10 +95,8 @@ def main():
 
     n_train_win = int((split_arr == 0).sum())
     n_out = n_orig + args.aug_copies * n_train_win
-    print(f"source: {n_orig} windows over {len(run_names)} runs "
-          f"({n_train_win} train-run windows)")
-    print(f"output: {n_out} windows "
-          f"({n_train_win} original + {args.aug_copies * n_train_win} aug of TRAIN runs only)")
+    print(f"source: {n_orig} windows over {len(run_names)} runs ({n_train_win} train-run windows)")
+    print(f"output: {n_out} windows ({n_train_win} original + {args.aug_copies * n_train_win} aug of TRAIN runs only)")
 
     # augment_sample draws from the GLOBAL numpy RNG -> seed it for determinism
     np.random.seed(args.aug_seed)
@@ -121,21 +120,20 @@ def main():
         n_run = len(idxs)
         n_write = n_run * (args.aug_copies + 1 if sp == SPLIT_IDS["train"] else 1)
         sl = slice(pos, pos + n_write)
-        block = np.repeat(X[idxs], 1, axis=0)          # originals first
+        block = np.repeat(X[idxs], 1, axis=0)  # originals first
         if sp == SPLIT_IDS["train"]:
-            aug_blocks = [np.stack([augment_sample(X[i][0].astype("float64"),
-                                                   vars_meta).astype("float32")
-                                     for i in idxs])[:, None]   # (n,1,C,W)
-                          for _ in range(args.aug_copies)]
+            aug_blocks = [
+                np.stack([augment_sample(X[i][0].astype("float64"), vars_meta).astype("float32") for i in idxs])[
+                    :, None
+                ]  # (n,1,C,W)
+                for _ in range(args.aug_copies)
+            ]
             block = np.concatenate([block] + aug_blocks, axis=0)
-            aug_out[pos + n_run:pos + n_write] = 1
+            aug_out[pos + n_run : pos + n_write] = 1
         X_out[sl] = block
-        yf_out[sl] = np.tile(y_fault[idxs], 1 if sp != SPLIT_IDS["train"]
-                             else args.aug_copies + 1)
-        ys_out[sl] = np.tile(y_sev[idxs], 1 if sp != SPLIT_IDS["train"]
-                             else args.aug_copies + 1)
-        ur_out[sl] = np.tile(ur[idxs], 1 if sp != SPLIT_IDS["train"]
-                             else args.aug_copies + 1)
+        yf_out[sl] = np.tile(y_fault[idxs], 1 if sp != SPLIT_IDS["train"] else args.aug_copies + 1)
+        ys_out[sl] = np.tile(y_sev[idxs], 1 if sp != SPLIT_IDS["train"] else args.aug_copies + 1)
+        ur_out[sl] = np.tile(ur[idxs], 1 if sp != SPLIT_IDS["train"] else args.aug_copies + 1)
         rid_out[sl] = rid
         split_out[sl] = sp
         pos += n_write
@@ -150,16 +148,18 @@ def main():
         f.create_dataset("is_aug", data=aug_out)
         f.create_dataset("split", data=split_out)
         out_meta = dict(src_meta)
-        out_meta.update({
-            "protocol": "sealed-run-grouped-v2",
-            "manifest": os.path.basename(args.manifest),
-            "manifest_sha256": manifest.get("sha256"),
-            "aug_seed": args.aug_seed,
-            "aug_copies": args.aug_copies,
-            "split_encoding": SPLIT_IDS,
-            "run_names": run_names,          # run_id -> run name mapping
-            "augmentation_scope": "train runs only",
-        })
+        out_meta.update(
+            {
+                "protocol": "sealed-run-grouped-v2",
+                "manifest": os.path.basename(args.manifest),
+                "manifest_sha256": manifest.get("sha256"),
+                "aug_seed": args.aug_seed,
+                "aug_copies": args.aug_copies,
+                "split_encoding": SPLIT_IDS,
+                "run_names": run_names,  # run_id -> run name mapping
+                "augmentation_scope": "train runs only",
+            }
+        )
         f.attrs["meta"] = json.dumps(out_meta)
     del X_out, block
 
@@ -172,8 +172,7 @@ def main():
         n_runs = len(np.unique(f["run_id"][:]))
     if n_bad:
         raise SystemExit(f"LEAKAGE: {n_bad} augmented windows outside train split")
-    print(f"verified: {n_out} windows, {n_runs} runs, per-split {per_split}, "
-          f"aug-outside-train = {n_bad}")
+    print(f"verified: {n_out} windows, {n_runs} runs, per-split {per_split}, aug-outside-train = {n_bad}")
     print(f"wrote {args.out}")
 
 

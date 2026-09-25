@@ -1,12 +1,15 @@
 try:
     from omni.isaac.kit import SimulationApp
+
     print("IMPORT_OK")
     sim = SimulationApp({"headless": True})
     print("SIMAPP_OK")
     sim.close()
     print("SIMAPP_CLOSED_OK")
 except Exception as e:
-    import traceback, sys
+    import traceback
+    import sys
+
     # Omniverse/Isaac may not be available in this environment.
     # For health checks we don't treat missing omni as a fatal error.
     print("IMPORT_ERR:", repr(e))

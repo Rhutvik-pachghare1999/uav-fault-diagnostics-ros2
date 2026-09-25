@@ -32,9 +32,10 @@ jobs:
       # ── Linting ────────────────────────────────────────────────────────────
       - name: Lint with flake8
         run: |
-          # Fail on syntax errors or undefined names; warn on style issues
+          # Fail on syntax errors or undefined names
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          flake8 . --count --exit-zero --max-line-length=120 --statistics
+          # Full style gate (repo .flake8 pins select/ignore/exclude at 120 cols)
+          flake8 . --count --statistics
 
       # ── Unit tests ─────────────────────────────────────────────────────────
       - name: Run pytest

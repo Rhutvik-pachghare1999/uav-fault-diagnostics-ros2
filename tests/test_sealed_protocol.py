@@ -13,7 +13,6 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from conftest import VARS13, make_checkpoint, run_script
@@ -34,8 +33,7 @@ def test_manifest_structure(manifest_data):
 def test_manifest_class_stratification(manifest_data):
     m = manifest_data
     for run, info in m["runs"].items():
-        part = ("train" if run in m["train"] else
-                "val" if run in m["val"] else "test")
+        part = "train" if run in m["train"] else "val" if run in m["val"] else "test"
         m["runs"][run]["part"] = part
     by_class = {}
     for run, info in m["runs"].items():
@@ -49,15 +47,13 @@ def test_manifest_class_stratification(manifest_data):
 def test_manifest_train_payload_coverage(manifest_data):
     m = manifest_data
     for cls in {info["class"] for info in m["runs"].values()}:
-        payloads = {m["runs"][r]["payload_kg"] for r in m["train"]
-                    if m["runs"][r]["class"] == cls}
+        payloads = {m["runs"][r]["payload_kg"] for r in m["train"] if m["runs"][r]["class"] == cls}
         assert len(payloads) == 3, f"class {cls} train runs miss payloads"
 
 
 def test_manifest_deterministic(synth_root, manifest, tmp_path):
     second = tmp_path / "split_second.json"
-    run_script("make_split_manifest.py",
-               "--project-root", str(synth_root), "--out", str(second))
+    run_script("make_split_manifest.py", "--project-root", str(synth_root), "--out", str(second))
     a = json.loads(manifest.read_text())
     b = json.loads(second.read_text())
     assert a["train"] == b["train"]
@@ -102,6 +98,7 @@ def test_sealed_dataset_preserves_originals(source_h5, sealed_h5):
 # ── Training smoke + self-describing checkpoint ─────────────────────────────
 def test_train_smoke_checkpoint_meta(sealed_ckpt, manifest_sha):
     import torch
+
     ck = torch.load(sealed_ckpt, map_location="cpu")
     meta = ck["meta"]
     assert meta["protocol"] == "sealed-run-grouped-v2"
@@ -114,34 +111,53 @@ def test_train_smoke_checkpoint_meta(sealed_ckpt, manifest_sha):
 
 # ── Evaluation guards ─────────────────────────────────────────────────────────
 def test_eval_refuses_unsealed_h5(source_h5, sealed_ckpt, tmp_path):
-    cp = run_script("eval_classifier.py",
-                    "--h5", str(source_h5), "--model", str(sealed_ckpt),
-                    "--out", str(tmp_path / "e1"), expect_fail=True)
+    cp = run_script(
+        "eval_classifier.py",
+        "--h5",
+        str(source_h5),
+        "--model",
+        str(sealed_ckpt),
+        "--out",
+        str(tmp_path / "e1"),
+        expect_fail=True,
+    )
     assert "sealed" in (cp.stdout + cp.stderr).lower()
 
 
 def test_eval_refuses_train_split(sealed_h5, sealed_ckpt, tmp_path):
-    cp = run_script("eval_classifier.py",
-                    "--h5", str(sealed_h5), "--model", str(sealed_ckpt),
-                    "--out", str(tmp_path / "e2"),
-                    "--split", "train", expect_fail=True)
+    cp = run_script(
+        "eval_classifier.py",
+        "--h5",
+        str(sealed_h5),
+        "--model",
+        str(sealed_ckpt),
+        "--out",
+        str(tmp_path / "e2"),
+        "--split",
+        "train",
+        expect_fail=True,
+    )
     assert "train" in (cp.stdout + cp.stderr).lower()
 
 
 def test_eval_refuses_manifest_sha_mismatch(sealed_h5, manifest_sha, tmp_path):
-    bad = make_checkpoint(tmp_path / "bad_sha.pth", VARS13,
-                          manifest_sha="deadbeef")
-    cp = run_script("eval_classifier.py",
-                    "--h5", str(sealed_h5), "--model", str(bad),
-                    "--out", str(tmp_path / "e3"), expect_fail=True)
+    bad = make_checkpoint(tmp_path / "bad_sha.pth", VARS13, manifest_sha="deadbeef")
+    cp = run_script(
+        "eval_classifier.py",
+        "--h5",
+        str(sealed_h5),
+        "--model",
+        str(bad),
+        "--out",
+        str(tmp_path / "e3"),
+        expect_fail=True,
+    )
     assert "manifest" in (cp.stdout + cp.stderr).lower()
 
 
 def test_eval_test_split_success(sealed_h5, sealed_ckpt, tmp_path):
     out = tmp_path / "eval_out"
-    cp = run_script("eval_classifier.py",
-                    "--h5", str(sealed_h5), "--model", str(sealed_ckpt),
-                    "--out", str(out))
+    run_script("eval_classifier.py", "--h5", str(sealed_h5), "--model", str(sealed_ckpt), "--out", str(out))
     meta = json.loads((out / "eval_meta.json").read_text())
     assert "window_accuracy" in meta
     # tiny random data, 1 epoch: only assert the plumbing, not the accuracy

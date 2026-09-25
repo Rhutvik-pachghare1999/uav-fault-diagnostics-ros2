@@ -15,52 +15,67 @@ SEALED protocol (recommended):
 Legacy mode (no --manifest): ephemeral in-process GroupShuffleSplit — metrics
 from this mode are NOT sealed and must not be reported as held-out results.
 """
-import argparse, h5py, numpy as np, os, json, ast
+
+import argparse
+import h5py
+import numpy as np
+import os
+import json
+import ast
 
 try:
     from tqdm import tqdm
 except ImportError:
+
     class tqdm:
         def __init__(self, iterable, **kwargs):
             self.iterable = iterable
+
         def __iter__(self):
             return iter(self.iterable)
+
         def set_postfix(self, *args, **kwargs):
             pass
+
         def set_description(self, *args, **kwargs):
             pass
+
         def close(self):
             pass
 
-import torch, logging
+
+import logging
 from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
+
 
 def setup_logging(log_file="logs/train.log"):
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
-        format='%(message)s',
-        handlers=[
-            logging.FileHandler(log_file, mode='w'),
-            logging.StreamHandler()
-        ]
+        format="%(message)s",
+        handlers=[logging.FileHandler(log_file, mode="w"), logging.StreamHandler()],
     )
     return logging.getLogger()
 
+
 class H5Dataset(Dataset):
     def __init__(self, X, yf, idxs, mean=None, std=None):
-        self.X = X[idxs].astype('float32')
+        self.X = X[idxs].astype("float32")
         self.yf = yf[idxs]
         # mean/std shape: (C,1) or (1,C,1) broadcasting OK
         self.mean = mean
         self.std = std
-    def __len__(self): return len(self.X)
+
+    def __len__(self):
+        return len(self.X)
+
     def __getitem__(self, idx):
         x = self.X[idx]
         if self.mean is not None and self.std is not None:
             x = (x - self.mean) / (self.std + 1e-9)
         return x, int(self.yf[idx])
+
 
 def main():
     p = argparse.ArgumentParser()
@@ -70,15 +85,23 @@ def main():
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--lr", type=float, default=0.01)
     p.add_argument("--base-filters", type=int, default=32)
-    p.add_argument("--manifest", default=None,
-                   help="frozen split manifest JSON; --h5 must carry split/is_aug "
-                        "columns (ml_sealed.h5). Sealed protocol v2.")
-    p.add_argument("--no-manifest-check", action="store_true",
-                   help="use the h5 split column as-is without cross-checking the "
-                        "manifest (for LOSO fold datasets with fold-specific splits)")
-    p.add_argument("--vars-subset", default=None,
-                   help="comma-separated channel subset to train on (e.g. IMU-only: "
-                        "'roll,pitch,yaw,gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z')")
+    p.add_argument(
+        "--manifest",
+        default=None,
+        help="frozen split manifest JSON; --h5 must carry split/is_aug columns (ml_sealed.h5). Sealed protocol v2.",
+    )
+    p.add_argument(
+        "--no-manifest-check",
+        action="store_true",
+        help="use the h5 split column as-is without cross-checking the "
+        "manifest (for LOSO fold datasets with fold-specific splits)",
+    )
+    p.add_argument(
+        "--vars-subset",
+        default=None,
+        help="comma-separated channel subset to train on (e.g. IMU-only: "
+        "'roll,pitch,yaw,gyro_x,gyro_y,gyro_z,acc_x,acc_y,acc_z')",
+    )
     p.add_argument("--history", default="results/train_history_sealed.json")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--tag", default="legacy", help="protocol tag recorded in the model meta")
@@ -87,7 +110,9 @@ def main():
     logger = setup_logging()
 
     try:
-        import torch, torch.nn as nn, torch.optim as optim
+        import torch
+        import torch.nn as nn
+        import torch.optim as optim
         from torch.utils.data import DataLoader
         from cnn_classifier import PaperCNN
     except Exception:
@@ -115,7 +140,7 @@ def main():
                 meta = ast.literal_eval(meta_raw)  # safe: literals only
             except Exception:
                 meta = {}
-        n_faults = len(meta.get("fault_label_map", {})) or int(y_fault.max()+1)
+        n_faults = len(meta.get("fault_label_map", {})) or int(y_fault.max() + 1)
 
     # optional channel subset (e.g. IMU-only live-deployment model)
     effective_vars = list(meta.get("vars", []))
@@ -135,8 +160,9 @@ def main():
     if args.manifest:
         # ---- SEALED PROTOCOL v2: split comes from the FROZEN manifest ----
         if split_col is None or is_aug is None:
-            raise SystemExit("--manifest requires an h5 with split/is_aug columns "
-                             "(build it with scripts/build_sealed_dataset.py)")
+            raise SystemExit(
+                "--manifest requires an h5 with split/is_aug columns (build it with scripts/build_sealed_dataset.py)"
+            )
         with open(args.manifest) as f:
             manifest = json.load(f)
         manifest_sha = manifest.get("sha256")
@@ -160,33 +186,43 @@ def main():
                     bad.append(name)
             if bad:
                 raise SystemExit(f"LEAKAGE GUARD: h5 split disagrees with manifest for runs {bad}")
-        tr_idx = np.where(split_col == 0)[0]                       # originals + train-only augs
-        val_idx = np.where((split_col == 1) & (is_aug == 0))[0]   # val originals, never augmented
+        tr_idx = np.where(split_col == 0)[0]  # originals + train-only augs
+        val_idx = np.where((split_col == 1) & (is_aug == 0))[0]  # val originals, never augmented
         n_test_guard = int(((split_col == 2) & (is_aug == 0)).sum())
         if len(val_idx) == 0 or n_test_guard == 0:
             raise SystemExit("sealed h5 must contain non-empty val and test partitions")
-        print(f"SEALED split from {os.path.basename(args.manifest)} "
-              f"(sha256 {str(manifest_sha)[:12]}…): {len(tr_idx)} train / {len(val_idx)} val / "
-              f"{n_test_guard} test windows (test NEVER loaded for training or early stop)")
+        print(
+            f"SEALED split from {os.path.basename(args.manifest)} "
+            f"(sha256 {str(manifest_sha)[:12]}…): {len(tr_idx)} train / {len(val_idx)} val / "
+            f"{n_test_guard} test windows (test NEVER loaded for training or early stop)"
+        )
         args.tag = "sealed-run-grouped-v2"
     else:
         # ---- LEGACY MODE: ephemeral split, NOT sealed ----
-        print("WARNING: no --manifest — using ephemeral in-process splits. Metrics from "
-              "this run are NOT sealed held-out results; do not report them as such.")
+        print(
+            "WARNING: no --manifest — using ephemeral in-process splits. Metrics from "
+            "this run are NOT sealed held-out results; do not report them as such."
+        )
         idx = np.arange(len(X_all))
         if run_id is not None and len(np.unique(run_id)) >= 3:
             from sklearn.model_selection import GroupShuffleSplit
+
             gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
             tr_full, te_idx = next(gss.split(idx, y_fault, groups=run_id))
-            tr_idx = idx[tr_full]; te_idx = idx[te_idx]
+            tr_idx = idx[tr_full]
+            te_idx = idx[te_idx]
             gss2 = GroupShuffleSplit(n_splits=1, test_size=0.15, random_state=42)
             tr_rel, val_rel = next(gss2.split(tr_idx, y_fault[tr_idx], groups=run_id[tr_idx]))
             tr_idx, val_idx = tr_idx[tr_rel], tr_idx[val_rel]
-            print(f"Run-grouped split: {len(tr_idx)} train / {len(val_idx)} val / {len(te_idx)} test "
-                  f"windows over {len(np.unique(run_id))} runs (no run crosses partitions).")
+            print(
+                f"Run-grouped split: {len(tr_idx)} train / {len(val_idx)} val / {len(te_idx)} test "
+                f"windows over {len(np.unique(run_id))} runs (no run crosses partitions)."
+            )
         else:
-            print("WARNING: run_id unavailable or <3 runs — falling back to stratified random "
-                  "split. Windows from the same run may leak across partitions; treat metrics as optimistic.")
+            print(
+                "WARNING: run_id unavailable or <3 runs — falling back to stratified random "
+                "split. Windows from the same run may leak across partitions; treat metrics as optimistic."
+            )
             try:
                 tr_idx, te_idx = train_test_split(idx, test_size=0.2, random_state=42, stratify=y_fault)
                 tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=y_fault[tr_idx])
@@ -195,13 +231,13 @@ def main():
                 tr_idx, val_idx = train_test_split(tr_idx, test_size=0.125, random_state=42, stratify=None)
 
     # compute per-channel mean/std on training set for normalization
-    X_tr = X_all[tr_idx].astype('float32')
+    X_tr = X_all[tr_idx].astype("float32")
     # X_tr shape: (N,1,C,W) -> compute mean/std per channel over samples and time
     # collapse sample and time dims to compute per-channel stats
     C = X_tr.shape[2]
-    vals = X_tr.reshape(X_tr.shape[0], C, -1).transpose(1,0,2).reshape(C, -1)
-    mean = vals.mean(axis=1).reshape(1,1,C,1)
-    std = vals.std(axis=1).reshape(1,1,C,1)
+    vals = X_tr.reshape(X_tr.shape[0], C, -1).transpose(1, 0, 2).reshape(C, -1)
+    mean = vals.mean(axis=1).reshape(1, 1, C, 1)
+    std = vals.std(axis=1).reshape(1, 1, C, 1)
 
     tr_ds = H5Dataset(X_all, y_fault, tr_idx, mean=mean, std=std)
     val_ds = H5Dataset(X_all, y_fault, val_idx, mean=mean, std=std)
@@ -212,14 +248,14 @@ def main():
     model = PaperCNN(in_channels=1, base_filters=args.base_filters, num_classes=n_faults).to(device)
     opt = optim.Adam(model.parameters(), lr=args.lr)
     loss_fn = nn.CrossEntropyLoss()
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode='min', factor=0.5, patience=5)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(opt, mode="min", factor=0.5, patience=5)
 
     model_meta = {
         "n_faults": n_faults,
         "mean": mean.tolist(),
         "std": std.tolist(),
-        "fault_label_map": meta.get('fault_label_map', {}),
-        "vars": effective_vars,          # channels the model ACTUALLY consumes
+        "fault_label_map": meta.get("fault_label_map", {}),
+        "vars": effective_vars,  # channels the model ACTUALLY consumes
         "base_filters": args.base_filters,
         "protocol": args.tag,
         "manifest": os.path.basename(args.manifest) if args.manifest else None,
@@ -239,15 +275,15 @@ def main():
 
     best_val = 0.0
     no_improve = 0
-    best_path = args.out
     history = {"train_loss": [], "val_loss": [], "val_acc": []}
 
     for epoch in range(args.epochs):
         model.train()
         tot, cnt = 0.0, 0
-        pbar = tqdm(tr_loader, desc=f"Epoch {epoch+1}/{args.epochs} [Train]")
+        pbar = tqdm(tr_loader, desc=f"Epoch {epoch + 1}/{args.epochs} [Train]")
         for xb, yf in pbar:
-            xb = xb.to(device); yf = yf.to(device)
+            xb = xb.to(device)
+            yf = yf.to(device)
             # handle unexpected extra singleton dimension from collate
             if xb.dim() == 5 and xb.size(2) == 1:
                 xb = xb.squeeze(2)
@@ -255,39 +291,49 @@ def main():
                 xb = xb.unsqueeze(1)
             pred = model(xb)
             loss = loss_fn(pred, yf)
-            opt.zero_grad(); loss.backward(); opt.step()
-            tot += float(loss.item()); cnt += 1
-            pbar.set_postfix(loss=f"{tot/cnt:.4f}")
-        
-        train_loss = tot/cnt if cnt > 0 else 0.0
-        
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            tot += float(loss.item())
+            cnt += 1
+            pbar.set_postfix(loss=f"{tot / cnt:.4f}")
+
+        train_loss = tot / cnt if cnt > 0 else 0.0
+
         # val acc
         model.eval()
         correct, total = 0, 0
-        val_loss = 0.0; val_cnt = 0
+        val_loss = 0.0
+        val_cnt = 0
         with torch.no_grad():
             for xb, yf in val_loader:
-                xb = xb.to(device); yf = yf.to(device)
+                xb = xb.to(device)
+                yf = yf.to(device)
                 if xb.dim() == 5 and xb.size(2) == 1:
                     xb = xb.squeeze(2)
                 if xb.dim() == 3:
                     xb = xb.unsqueeze(1)
                 pf = model(xb)
                 pred = pf.argmax(dim=1)
-                correct += int((pred == yf).sum().item()); total += len(yf)
-                l = loss_fn(pf, yf)
-                val_loss += float(l.item()); val_cnt += 1
-        
-        val_acc = correct/total if total>0 else 0.0
-        val_loss_avg = (val_loss/val_cnt) if val_cnt else 0.0
+                correct += int((pred == yf).sum().item())
+                total += len(yf)
+                loss = loss_fn(pf, yf)
+                val_loss += float(loss.item())
+                val_cnt += 1
+
+        val_acc = correct / total if total > 0 else 0.0
+        val_loss_avg = (val_loss / val_cnt) if val_cnt else 0.0
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss_avg)
         history["val_acc"].append(val_acc)
-        msg = f"Epoch {epoch+1}/{args.epochs} train_loss={train_loss:.4f} val_loss={val_loss_avg:.4f} val_acc={val_acc:.4f}"
+        msg = (
+            f"Epoch {epoch + 1}/{args.epochs} train_loss={train_loss:.4f} "
+            f"val_loss={val_loss_avg:.4f} val_acc={val_acc:.4f}"
+        )
         logger.info(msg)
-        
+
         scheduler.step(val_loss_avg)
-        
+
         # checkpoint best
         if val_acc > best_val:
             best_val = val_acc
@@ -298,8 +344,8 @@ def main():
             print(f"  --> Saved new best model (acc={val_acc:.4f}) to {best_model_path}")
         else:
             no_improve += 1
-            
-        if no_improve >= 15: # Increased patience slightly
+
+        if no_improve >= 15:  # Increased patience slightly
             print(f"Early stopping triggered after {no_improve} epochs of no improvement.")
             break
 
@@ -316,6 +362,7 @@ def main():
     with open(args.history, "w") as f:
         json.dump(history, f, indent=2)
     print(f"Saved training history to {args.history}")
+
 
 if __name__ == "__main__":
     main()

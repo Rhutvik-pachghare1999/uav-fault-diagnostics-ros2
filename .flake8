@@ -1,0 +1,17 @@
+[flake8]
+# Style gate matching .github/workflows/ci.yml. 120 columns (same as
+# pyproject.toml [tool.ruff] line-length). E402 is endemic to the
+# scripts/ pattern of sys.path.insert() before sibling imports.
+# select is pinned to E,W,F,C90 so local runs are identical to CI
+# (developer machines may have flake8 docstring/quotes/import-order
+# plugins installed; those codes are intentionally not gated here).
+select = E, W, F, C90
+max-line-length = 120
+extend-ignore = E203, W503, W504, E402
+exclude =
+    .git,
+    __pycache__,
+    isaac_dataset,
+    ros2_ws/build,
+    ros2_ws/install,
+    ros2_ws/src/uav_aegis/uav_aegis/vendor

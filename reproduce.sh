@@ -80,16 +80,13 @@ fi
 # ============================================================================
 if [ "$SKIP_DEPS" = false ]; then
     echo -e "\n${YELLOW}[1/9] Installing Python Dependencies${NC}"
-    pip install --upgrade pip
-    pip install -r requirements.txt
-    
-    # Install ROS2 Python packages if ROS2 is available
-    if [ -f /opt/ros/jazzy/setup.sh ]; then
-        source /opt/ros/jazzy/setup.sh
-        pip install rclpy rosidl-runtime-py sensor-msgs std-msgs 2>/dev/null || true
-    fi
+    python3 -m pip install --upgrade pip
+    python3 -m pip install -r requirements.txt
+    # NOTE: rclpy and ROS message packages are provided by the ROS 2
+    # installation itself (sourced from /opt/ros/jazzy/setup.sh below) and
+    # must NOT be pip-installed - a pip copy can shadow the ROS one.
 else
-    echo -e "\n${YELLOW}[1/9] Skipping Dependency Installation${NC}"
+    echo -e "${YELLOW}[1/9] Skipping Dependency Installation${NC}"
 fi
 
 # ============================================================================
@@ -256,11 +253,26 @@ else
     echo -e "${YELLOW}Skipping ROS2 build (quick mode or ROS2 not available)${NC}"
 fi
 
-# Test offline replay mode (doesn't require ROS2 running)
+# Test offline replay mode (doesn't require ROS2 running) and ASSERT the
+# modal prediction on the healthy run is the healthy class. Without this
+# check a broken model/normalization path ships silently (the tracked
+# results/replay_test.csv was once all label_14 on this healthy input).
 echo "Testing offline replay mode..."
 python3 scripts/ros2_inference_node.py --model models/cnn_imu9.pth --mode replay \
     --input isaac_dataset/run_cf2x_healthy_p00_s0/imu.csv --output results/replay_test.csv \
     --window 100 --step 10
+REPLAY_MODAL=$(python3 -c "
+import csv, collections
+with open('results/replay_test.csv') as f:
+    rows = list(csv.DictReader(f))
+modal = collections.Counter(r['fault_id'] for r in rows).most_common(1)[0]
+print(f'{modal[0]} {modal[1]}/{len(rows)}')
+")
+echo "Replay modal prediction: $REPLAY_MODAL"
+if [ "$(echo "$REPLAY_MODAL" | cut -d' ' -f1)" != "0" ]; then
+    echo -e "${RED}FAIL: modal prediction on the healthy replay run is not fault_id 0 (healthy).${NC}"
+    exit 1
+fi
 
 # ============================================================================
 # Step 8: Run Tests
@@ -296,6 +308,7 @@ echo ""
 echo "  13-channel model (needs RPM telemetry):"
 echo "  ros2 run uav_aegis fault_inference_node --model models/cnn_sealed.pth --mode live --rpm-topic /rotor_rpms"
 echo ""
-echo "To replay a PX4 log file:"
-echo "  python3 scripts/ros2_inference_node.py --model models/cnn_imu9.pth --mode replay --input <log.csv>"
+echo "To replay a PX4 flight log (.ulg) or an IMU CSV:"
+echo "  python3 scripts/px4_log_replay.py --mode ros2 <log.ulg> --model models/cnn_imu9.pth"
+echo "  python3 scripts/px4_log_replay.py --mode offline <imu.csv> --model models/cnn_imu9.pth --output results/px4_replay.csv"
 echo ""

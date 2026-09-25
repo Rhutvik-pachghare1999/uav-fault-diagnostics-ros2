@@ -14,7 +14,6 @@ try:
     import numpy as np
     from isaacsim.core.api import World
     from isaacsim.core.objects import DynamicCuboid
-    from isaacsim.sensors.physics.imu_sensor import IMUSensor
 
     print("[1] isaacsim core + IMU imports: OK")
 

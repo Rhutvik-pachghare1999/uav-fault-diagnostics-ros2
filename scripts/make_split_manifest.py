@@ -14,6 +14,7 @@ Protocol rules (leakage-audited):
 Usage:
   python3 scripts/make_split_manifest.py --out splits/split_manifest.json
 """
+
 import argparse
 import glob
 import hashlib
@@ -104,7 +105,9 @@ def main():
     split = stratified_split(recs, args.seed)
     per_class = validate(split, recs)
 
-    payload_of = lambda n: recs[n]["payload_kg"]
+    def payload_of(n):
+        return recs[n]["payload_kg"]
+
     manifest = {
         "protocol": "sealed-run-grouped-v2",
         "seed": args.seed,
@@ -114,17 +117,15 @@ def main():
             "per_class": PER_CLASS,
             "augmentation": "train runs only, after split, seeded",
             "notes": "windows of a run never cross partitions; val/test are "
-                     "never augmented; consumers must load this file instead "
-                     "of re-splitting",
+            "never augmented; consumers must load this file instead "
+            "of re-splitting",
         },
         "runs": recs,
         "train": sorted(split["train"]),
         "val": sorted(split["val"]),
         "test": sorted(split["test"]),
         "per_class": {c: dict(p) for c, p in sorted(per_class.items())},
-        "payload_coverage": {
-            part: sorted({payload_of(n) for n in names}) for part, names in split.items()
-        },
+        "payload_coverage": {part: sorted({payload_of(n) for n in names}) for part, names in split.items()},
     }
     # sha256 pins the split CONTENT (train/val/test membership + metadata), not
     # the wall-clock "created" stamp — regenerating with the same seed must
@@ -136,8 +137,10 @@ def main():
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(manifest, f, indent=2, sort_keys=True)
-    print(f"Wrote {args.out}: {len(split['train'])} train / {len(split['val'])} val / "
-          f"{len(split['test'])} test runs (sha256 {manifest['sha256'][:12]}…)")
+    print(
+        f"Wrote {args.out}: {len(split['train'])} train / {len(split['val'])} val / "
+        f"{len(split['test'])} test runs (sha256 {manifest['sha256'][:12]}…)"
+    )
     for cls, parts in list(per_class.items())[:3]:
         print(f"  e.g. {cls}: {dict(parts)}")
 

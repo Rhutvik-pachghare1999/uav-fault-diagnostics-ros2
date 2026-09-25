@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Simple launcher that sets env and runs recorder via Isaac's python.sh
-ISAAC_ROOT="${ISAAC_ROOT:-/home/rhutvik/isaacsim}"
-PROJECT_ROOT="${PROJECT_ROOT:-/home/rhutvik/isaac_sim_uav/prop_repro_project}"
+# Simple launcher that sets env and runs recorder via Isaac's python.sh.
+# All paths default to this repository and $HOME; override via env vars.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ISAAC_ROOT="${ISAAC_ROOT:-$HOME/isaacsim}"
+PROJECT_ROOT="${PROJECT_ROOT:-$SCRIPT_DIR}"
 SCRIPT_PATH="${PROJECT_ROOT}/scripts/isaac_replay_recorder.py"
-QUAD_USD="${QUAD_USD:-/home/rhutvik/isaac_sim_uav/scripts/quad.usd}"
+QUAD_USD="${QUAD_USD:-${PROJECT_ROOT}/isaac/assets/Bitcraze/Crazyflie/cf2x.usd}"
 OUTDIR="${OUTDIR:-${PROJECT_ROOT}/isaac_dataset}"
 
 export EXP_PATH="${EXP_PATH:-${PROJECT_ROOT}}"
