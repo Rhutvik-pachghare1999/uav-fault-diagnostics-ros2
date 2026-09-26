@@ -1,4 +1,4 @@
-# UAV Aegis: propeller fault diagnostics for a quadrotor (Isaac Sim + PyTorch + ROS 2)
+# UAV Aegis: propeller fault diagnosis for a Crazyflie 2.1
 
 <div align="center">
 
@@ -9,11 +9,11 @@
 [![ROS 2](https://img.shields.io/badge/ROS_2-Jazzy-22314E?logo=ros&logoColor=white)](https://docs.ros.org/en/jazzy/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Propeller fault diagnostics for a Bitcraze Crazyflie 2.1 X-quadrotor.
-The pipeline generates faulted flights in NVIDIA Isaac Sim, converts the
-telemetry into 13-channel windows, trains a compact 2D-CNN (convolutions over
-the window matrix, 112K parameters) to classify the fault,
-evaluates it on held-out flights, and serves the model through a ROS 2 node.
+**Physics-based fault injection in Isaac Sim → IMU/RPM learning → sealed flight-level evaluation → ROS 2 deployment**
+
+A compact CNN-based diagnostic pipeline that classifies simulated Crazyflie
+propeller/rotor faults from 0.2-second IMU/RPM windows, with flight-level
+evaluation, cross-RPM validation, OOD experiments, and ROS 2 deployment.
 
 All 96 flights come from physics simulation at 500 Hz (48 train, 16 validation,
 32 test, split by flight). Faults are
@@ -34,15 +34,19 @@ checked against rotor dynamics before any model is trained.
 
 ## Results summary
 
+**81.7%** sealed test accuracy · **93.2%** mean accuracy on held-out hover-RPM bins (4-fold LOSO) · **0.37 ms** p99 CPU inference latency · **112K** CNN parameters
+
+Full breakdown:
+
 | Metric | Value | Protocol |
 |:---|:---:|:---|
 | Test accuracy (13-ch model) | **81.7%** (macro F1 0.80) | 35,232 windows from 32 held-out test flights |
 | Test accuracy (IMU-only 9-ch model) | 79.9% | same flights, no RPM channels |
-| Healthy class F1 | 1.00 (precision and recall) | no missed faults, no false alarms |
+| Healthy class F1 | 1.00 (precision and recall) | sealed test set only: no missed faults, no false alarms |
 | Worst fault class | `label_12` (mask0c, rotors R3+R4) recall 0.13 | see Failure cases |
 | Per-run spread | 81.7% ± 24.8%, min 0% (4/32 runs below 50%) | accuracy varies strongly across flights |
 | Cross-RPM generalization (LOSO) | 90.3 / 91.3 / 99.0 / 92.3%, mean 93.2% ± 3.4 | whole hover-RPM bins held out, model retrained per fold |
-| OOD detection | energy score AUROC 0.996 | confidence-based scores do not separate (0.40–0.60) |
+| OOD detection | energy score AUROC 0.996 | synthetic gaussian-noise benchmark; confidence-based scores do not separate (0.40–0.60) |
 | Inference latency | 0.20 ms mean / 0.37 ms p99 | single window, CPU |
 
 Full reports: `results/eval_sealed/`, `results/eval_imu9/`, `results/cross_speed_loso.json`,
@@ -53,8 +57,9 @@ Full reports: `results/eval_sealed/`, `results/eval_imu9/`, `results/cross_speed
 
 ## Problem
 
-Mechanical faults such as blade chips, motor imbalance, and bearing wear are usually invisible
-to standard telemetry until they cascade into in-flight failure. Rotor imbalance creates a 1P
+This project studies whether IMU/RPM signatures caused by simulated propeller and rotor
+faults can be detected and isolated before they produce an unacceptable flight condition.
+Rotor imbalance creates a 1P
 vibration line (once per revolution) exactly at the faulted rotor's speed. The line is present
 in gyroscope and accelerometer spectra, but weak and easy to miss in flight data. UAV Aegis
 classifies it from 0.2-second IMU+RPM windows.
@@ -79,8 +84,10 @@ classifies it from 0.2-second IMU+RPM windows.
   quadrotor rebalancing signature. This emerges from the physics; it is not scripted.
 - **Hover operating points track payload.** 2908 / 3165 / 3412 RPM at 0 / 5 / 10 g, consistent
   with T = kω² for the true vehicle mass, with a realistic ~1.5× throttle headroom.
-- **No-crash audit.** All 96 missions fly: min altitude 0.034 m against a 0.55 m reference,
-  mean altitude 0.37–0.60 m. Getting the multi-fault cases airborne at all required an altitude
+- **No-crash audit.** All 96 simulated missions completed after tuning the controller to
+  maintain altitude under the maximum injected fault severity: min altitude 0.034 m against a
+  0.55 m reference, mean altitude 0.37–0.60 m. Getting the multi-fault cases airborne at all
+  required an altitude
   I-term in the controller (`isaac/cf2x_fault_sim.py`); without it, the 4-fault aircraft
   (η = 0.85) is thrust-starved and never leaves the ground.
 
@@ -155,13 +162,15 @@ refuses checkpoints without this metadata.
 
 ### What worked
 
-- The `healthy` class is never misclassified in either direction (F1 1.00). For a deployment
-  story built on detection before classification, this is the class that matters most.
+- On the sealed test set, the `healthy` class has precision 1.00 and recall 1.00 — no missed
+  faults and no false alarms among the 32 held-out test flights. This does not establish
+  reliable healthy detection on any other data source.
 - High-severity or multi-rotor faults do not classify uniformly: the strongest fault classes
   (`label_9` F1 0.99, `label_6` 0.94) and the weakest (`label_12` 0.24, `label_14` 0.61) are
   both multi-rotor faults, so severity and rotor count do not predict separability.
-- Cross-operating-point generalization is real: with three RPM bins in training, a model
-  retrained from scratch reads a never-seen fourth bin at 90–99% (Figure 9).
+- The model retained performance when an entire hover-RPM bin was held out during training,
+  although accuracy varied substantially by operating point: 90.3–99.0% across the four
+  retrained folds (Figure 9).
 
 ### Failure cases
 
@@ -177,9 +186,13 @@ refuses checkpoints without this metadata.
 - Per-run spread is large (±24.8%). The mean window accuracy hides flight-level failures, which
   is why per-run metrics are reported alongside the aggregate.
 
-The LOSO results add a useful contrast: each fold sees more operating-point diversity (three
-bins) than the sealed train split, and scores higher (93.2% mean). Adding low-RPM training
-flights is the clearest data-collection target for the weak corner.
+> **Why is LOSO (93.2%) higher than the sealed test (81.7%)?** The two experiments answer
+> different questions. The sealed evaluation fixes a flight-level train/validation/test split
+> across payloads and seeds, while LOSO holds out an entire hover-RPM bin and retrains on the
+> other three bins. The LOSO training set therefore contains substantially more
+> operating-point diversity than the sealed split's training set, and scores higher as a
+> result. Adding low-RPM training flights is the clearest data-collection target for the
+> weak corner.
 
 ### Cross-RPM generalization (LOSO)
 
@@ -193,7 +206,7 @@ flights is the clearest data-collection target for the weak corner.
 <p align="center">
   <img src="results/figures/fig7_benchmark.png" alt="Per-class accuracy and inference latency benchmark on sealed test windows" width="88%">
 </p>
-<p align="center"><sub>Figure 10: Latency benchmark (sealed test windows, CPU). 0.20 ms mean / 0.37 ms p99 per window, about 1000× faster than the 0.2 s window itself.</sub></p>
+<p align="center"><sub>Figure 10: Latency benchmark (sealed test windows, CPU). 0.20 ms mean / 0.37 ms p99 per window.</sub></p>
 
 ### Uncertainty and OOD detection
 
@@ -214,9 +227,13 @@ Measured on sealed test windows against gaussian-noise OOD (`results/uncertainty
 The AUROC convention here is higher = more OOD-like; the orientation of every score is asserted
 in `tests/test_uncertainty_guards.py`.
 
-Fault identity (which rotors) and severity (from the number of faulted rotors, plus `ur`) are
-kept as separate outputs. Per-window true and predicted severity is stored in
-`results/eval_sealed/predictions.npz` (`sev` key).
+**OOD limitation.** The current OOD experiment uses synthetic gaussian-noise samples. It
+demonstrates separation of that noise distribution from in-distribution windows; it does not
+demonstrate detection of previously unseen physical failure modes, which is untested.
+
+Fault identity (which rotors) is the model's only output. Severity (from the number of
+faulted rotors, plus `ur`) is ground-truth metadata, not a predicted head; the per-window
+true severity is stored in `results/eval_sealed/predictions.npz` (`sev` key).
 
 ---
 
