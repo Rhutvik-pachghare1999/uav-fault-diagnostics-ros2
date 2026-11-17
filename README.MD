@@ -52,6 +52,15 @@ Full breakdown:
 Full reports: `results/eval_sealed/`, `results/eval_imu9/`, `results/cross_speed_loso.json`,
 `results/uncertainty_sealed.json`, `results/benchmark_summary.json`. All figures are in
 `results/figures/`.
+**Different metrics, different protocols:** `results/benchmark_summary.json` reports 0.7949 overall accuracy on 512 sampled windows from an auxiliary benchmark. That file does not independently establish the headline 81.7% result from the sealed, flight-disjoint evaluation. For the latter, consult [the sealed evaluation metadata](results/eval_sealed/eval_meta.json), [flight-level outcomes](results/eval_sealed/per_run_accuracy.json) and [frozen split manifest](splits/split_manifest.json). The full sealed dataset is required to rerun that evaluation; model weights or synthetic smoke tests are not substitutes.
+
+**CPU-only reproducibility smoke (synthetic data, not model validation):**
+
+```bash
+python3 -m pytest -q tests/
+BENCHMARK_RESULTS_DIR="$(mktemp -d)" python3 scripts/benchmarks/run_benchmark.py --smoke
+```
+
 
 ---
 
@@ -259,7 +268,7 @@ current protocol:
    26,424 windows), validates on 11 flights, and retrains from scratch on the remaining 61
    (plus ×2 augmentation). Zero-shot scores against bins the model trained next to are not
    reported.
-5. **34 CI integrity tests** (`pytest tests/`, self-contained synthetic fixtures, no dataset
+5. **40 local integrity tests (2026-11-17)** (`pytest tests/`, self-contained synthetic fixtures, no dataset
    or weights needed) covering manifest determinism and stratification, sealed aug-isolation,
    evaluator guard rails, builder failure behavior, OOD AUROC orientation, and the deployment
    node's startup guards.
