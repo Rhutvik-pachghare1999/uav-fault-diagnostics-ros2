@@ -11,15 +11,16 @@
 
 **Physics-based fault injection in Isaac Sim → IMU/RPM learning → sealed flight-level evaluation → ROS 2 deployment**
 
-A compact CNN-based diagnostic pipeline that classifies simulated Crazyflie
-propeller/rotor faults from 0.2-second IMU/RPM windows, with flight-level
-evaluation, cross-RPM validation, OOD experiments, and ROS 2 deployment.
+I wanted to see whether a small model could tell rotor faults apart from
+just 0.2 seconds of IMU and RPM measurements. So I injected different
+faults into Crazyflie flights in Isaac Sim, checked the resulting signals,
+and trained a CNN to classify them.
 
-All 96 flights come from physics simulation at 500 Hz (48 train, 16 validation,
-32 test, split by flight). Faults are
-injected as physical parameter changes (mass imbalance, aerodynamic asymmetry,
-efficiency and motor-gain loss), and the resulting vibration signatures are
-checked against rotor dynamics before any model is trained.
+There are 96 simulated flights. I split them by entire flight, not by
+neighboring sensor windows: 48 for training, 16 for validation, and 32
+for testing. The repository also includes cross-RPM experiments and a
+ROS 2 inference node. The fault injections cover mass imbalance,
+aerodynamic asymmetry, and motor efficiency/gain changes.
 
 </div>
 
